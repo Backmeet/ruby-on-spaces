@@ -28,6 +28,7 @@ while end <value>
 
 def <name> <number or arguments>
 return <value>
+endfunc
 
 window init <width[number]> <height[number]>
 window fil r g b
