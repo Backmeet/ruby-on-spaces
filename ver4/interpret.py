@@ -194,7 +194,7 @@ try:
                 end_index = None
                 for j in range(start_index, len(current_lines)):
                     tokens = tokenize(current_lines[j])
-                    if tokens and tokens[0] == "return":
+                    if tokens and tokens[0] == "endfunc":
                         end_index = j
                         break
                 if end_index is None:
@@ -408,7 +408,7 @@ try:
                             end_index = None
                             for j in range(start_index, len(imported_lines)):
                                 tokens = tokenize(imported_lines[j])
-                                if tokens and tokens[0] == "return":
+                                if tokens and tokens[0] == "endfunc":
                                     end_index = j
                                     break
                             if end_index is None:
