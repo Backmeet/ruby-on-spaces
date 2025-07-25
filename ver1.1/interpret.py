@@ -202,6 +202,7 @@ try:
                 match args[0]:
                     case "math":
                         # Binary operation: var math <operand1> <op> <operand2> = <target>
+                        #                   cmd 0     1         2    3          4 5
                         if len(args) == 6 and args[4] == "=":
                             parsed1 = parseValue(args[1])
                             parsed2 = parseValue(args[3])
@@ -270,12 +271,14 @@ try:
                         else:
                             raise ValueError(f"On line {current_index} in {current_source}: Invalid math syntax.")
                     case _:
-                        if args[2] != "=": raise SyntaxError(f"Invalid variable assignment syntax | line {current_index} in {current_source} |")
+                        # var <var> = <value>
+                        # cmd 0     1 2
+                        if args[1] != "=": raise SyntaxError(f"Invalid variable assignment syntax | line {current_index} in {current_source} |")
                         
-                        parsed1 = parseValue(args[3])
+                        parsed1 = parseValue(args[2])
                         variables[args[0]] = parsed1[0]
 
-                        
+
             case "while":
                 match args[0]:
                     case "begin":
