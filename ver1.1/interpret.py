@@ -102,8 +102,7 @@ try:
             val = varContext[valueStr]
             value_type = "var int" if isinstance(val, int) or isinstance(val, float) else "var str"
             return val, value_type
-        elif (valueStr.startswith("'") and valueStr.endswith("'")) or \
-            (valueStr.startswith('"') and valueStr.endswith('"')):
+        elif (valueStr.startswith("'") and valueStr.endswith("'")) or (valueStr.startswith('"') and valueStr.endswith('"')):
             return valueStr[1:-1], "literal str"
         elif isdigit(valueStr):
             if "." in valueStr:
