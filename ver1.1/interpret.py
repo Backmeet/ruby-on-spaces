@@ -324,11 +324,11 @@ try:
                 end_index = None
                 for j in range(start_index, len(current_lines)):
                     tokens = tokenize(current_lines[j])
-                    if tokens and tokens[0] == "return":
+                    if tokens and tokens[0] == "endfunc":
                         end_index = j
                         break
                 if end_index is None:
-                    raise ValueError(f"Function {func_name} has no return statement.")
+                    raise ValueError(f"Function {func_name} has no endfunc statement.")
                 functionIndexs[current_source][func_name] = (start_index, num_args, end_index)
                 current_index = end_index
                 current_lines = sources[current_source]
@@ -341,6 +341,13 @@ try:
                     current_source, current_index = functionStack.pop()
                     current_lines = sources[current_source]
                     continue
+
+            case "endfunc":
+                if functionStack:
+                    current_source, current_index = functionStack.pop()
+                    current_lines = sources[current_source]
+                    continue
+                
 
             case "call":
                 func_name = args[0]
@@ -538,11 +545,11 @@ try:
                             end_index = None
                             for j in range(start_index, len(imported_lines)):
                                 tokens = tokenize(imported_lines[j])
-                                if tokens and tokens[0] == "return":
+                                if tokens and tokens[0] == "endfunc":
                                     end_index = j
                                     break
                             if end_index is None:
-                                raise ValueError(f"Function {func_name} has no return statement in {file_path}")
+                                raise ValueError(f"Function {func_name} has no endfunc statement in {file_path}")
                             fileFunctions[func_name] = (start_index, num_args, end_index)
 
                 # Store only allowed functions
