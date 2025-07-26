@@ -1,4 +1,3 @@
-import shutil
 import os
 import requests
 import base64
