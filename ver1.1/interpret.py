@@ -575,13 +575,17 @@ except Exception as e:
     varibles:
     ''')
     for i, v in variables.items(): print(f"{i}:{v}")
-    print("Souces")
-    for i, v in sources.items(): print(f"{i}:{str(v)[0:25]}...")
-    print("current source")
-    print(current_source)
-    print("function Indexs")
-    for i, v in functionIndexs.items(): print(f"{i}:{str(v)[0:25]}...")
-    print("Index")
-    print(current_index)
+    print("Souces: ", end="")
+    for i, v in sources.items(): print(f"{i}; ", end="")
+    print("\n")
+    print(f"current source: {current_source}\n")
+    print("function Indexs:")
+    for source, funcs in functionIndexs.items():
+        print(f"   {source}:")
+        for func_name, (start, num_args, end) in funcs.items():
+            print(f"      {func_name}: start={start}, num_args={num_args}, end={end}")
+        print("")
+        
+    print(f"Index: {current_index}")
     input("Press Enter to exit...")
     exit(1)
