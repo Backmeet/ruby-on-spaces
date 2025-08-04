@@ -82,6 +82,7 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
                 match op:
                     case "index": return (a[b])
                     case "pop": return (a.pop(b))
+                    case "*": return (a * b)
         elif len(token) == 2:
             a_ = parseValue(token[1])
             op = token[0]
@@ -528,4 +529,8 @@ def fib 1
     while end arg1
     endfunc
 call fib 10
+''')
+runRuby('''
+var _ = "hi" index 0
+print _
 ''')

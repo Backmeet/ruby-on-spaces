@@ -1,23 +1,36 @@
-import re
+import re, math
+
+token_pattern = re.compile(
+    r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|==|!=|>=|<=|//|\*\*|'
+    r'and|or|not|index|in|pop|len|sqrt|cbrt|sin|cos|tan|'
+    r'\d+\.?\d*|\w+|[()+\-*/%^<>=|&~]'
+)
 
 def SafeEval(expr: str, expressionParcer):
     # Tokenize
-    tokens = re.findall(
-        r'''==|!=|>=|<=|//|\*\*|and|or|not|in|index|pop|len|sqrt|cbrt|sin|cos|tan|\d+\.?\d*|\w+|[()+\-*/%^<>=|&~]''',
+    tokens = token_pattern.findall(
         expr
     )
 
     if len(tokens) == 1:
-        tokens.extend(["+", "0"])
+        tokens.extend(["*", "1"])
+    
+    # reserved so that you dont treat them as varibles
+    word_operators = {
+        'and', 'or', 'not', 'in', 'index', 'pop', 'len',
+        'sqrt', 'cbrt', 'sin', 'cos', 'tan'
+    }
 
     # Insert implicit multiplication
     new_tokens = []
     for i, token in enumerate(tokens):
         if i > 0:
             prev = tokens[i - 1]
+            # If previous is a variable or closing paren — and current is a variable, number or opening paren
             if (
-                re.fullmatch(r'\w+|\)', prev) and
-                (token == '(' or re.fullmatch(r'\w+|\d+', token))
+                (re.fullmatch(r'\w+', prev) and prev not in word_operators) or prev == ')'
+            ) and (
+                token == '(' or re.fullmatch(r'\d+\.?\d*|\w+', token) and token not in word_operators
             ):
                 new_tokens.append('*')
         new_tokens.append(token)
@@ -67,12 +80,10 @@ def SafeEval(expr: str, expressionParcer):
     # Parser loop
     expect_operand = True
     for token in tokens:
-        if re.fullmatch(r'\d+\.?\d*|\w+', token):  # literal or variable
-            output.append(token)
-            expect_operand = False
-        elif token in unary_operators and expect_operand:
+        if token in unary_operators and expect_operand:
             stack.append(('unary', token))
             expect_operand = True
+
         elif token in precedence:
             while stack and stack[-1][0] == 'binary':
                 _, top = stack[-1]
@@ -84,19 +95,36 @@ def SafeEval(expr: str, expressionParcer):
                     break
             stack.append(('binary', token))
             expect_operand = True
+
+        elif re.fullmatch(r'\d+\.?\d*', token):  # number
+            output.append(token)
+            expect_operand = False
+
+        elif (token.startswith('"') and token.endswith('"')) or (token.startswith("'") and token.endswith("'")):
+            output.append(token)
+            expect_operand = False
+
+        elif re.fullmatch(r'\w+', token):  # variable name
+            output.append(token)
+            expect_operand = False
+
         elif token == '(':
             stack.append(('paren', token))
             expect_operand = True
+
         elif token == ')':
             while stack and stack[-1][1] != '(':
                 pop_op()
             if stack and stack[-1][1] == '(':
-                stack.pop()  # remove '('
+                stack.pop()  # Remove '('
             if stack and stack[-1][0] == 'unary':
                 typ, op = stack.pop()
                 arg = output.pop()
                 output.append([op, arg])
             expect_operand = False
+
+        else:
+            raise ValueError(f"Unexpected token: {token}")
 
     while stack:
         pop_op()
@@ -119,22 +147,103 @@ def SafeEval(expr: str, expressionParcer):
 
 
 if __name__ == "__main__":
-    arg1 = 10
-    arg2 = 32
 
-    def f(x):
-        print(x)
-        # Flatten to string expression
-        def flatten(e):
-            if isinstance(e, list):
-                return "(" + " ".join(flatten(i) for i in e) + ")"
-            return str(e)
-        expr = flatten(x)
-        return eval(expr, globals())
+    variables = {
+        "x":0,
+        "y":"'hello, world'",
+        "_":0
+    }
 
-    f(SafeEval("arg1 - 1", f))
-    f(SafeEval("arg1 + arg2", f))
-    f(SafeEval("arg1 // 12", f))
-    f(SafeEval("10 / -2", f))
-    f(SafeEval("12 * 3", f))
-    f(SafeEval("3 + 7 / 2", f))
+    
+    def isdigit(string):
+        try:
+            float(string)
+            return True
+        except:
+            return False
+
+    def parseValue(valueStr, varContext=None):
+        if varContext is None:
+            varContext = variables
+        if valueStr.lower() == "null": return 0, "literal int"
+        if valueStr.lower() == "none": return 0, "literal int"
+        if valueStr.lower() == "nil": return 0, "literal int"
+        if valueStr.lower() == "true": return 1, "literal int"
+        if valueStr in varContext:
+            val = varContext[valueStr]
+            return val, "var int" if isinstance(val, (int, float)) else "var str"
+        elif (valueStr.startswith('"') and valueStr.endswith('"')) or (valueStr.startswith("'") and valueStr.endswith("'")):
+            return valueStr[1:-1], "literal str"
+        elif isdigit(valueStr):
+            return (float(valueStr) if "." in valueStr else int(valueStr)), "literal int"
+        else:
+            raise ValueError(f"Value | {valueStr} | is not valid ")
+
+    def mathParcer(token):
+            if len(token) == 3:
+                a_ = parseValue(token[0])
+                op = token[1]
+                b_ = parseValue(token[2])
+                a = a_[0]
+                b = b_[0]
+
+                if a_[1] in ["var int", "literal int"] and b_[1] in ["var int", "literal int"]:
+                    match op: # + - * / // ^ | & == != >= <= < > and or
+                        case "+": return a + b
+                        case "-": return a - b
+                        case "/": return a // b
+                        case "*": return a * b
+                        case "//": return a // b
+                        case "**": return a ** b
+                        case "^": return a ^ b
+                        case "|": return a | b
+                        case "&": return a & b
+                        case "==": return int(a == b)
+                        case "!=": return int(a != b)
+                        case ">=": return int(a >= b)
+                        case "<=": return int(a <= b)
+                        case ">": return int(a > b)
+                        case "<": return int(a < b)
+                        case "and": return int(a and b)
+                        case "or": return int(a or b)
+                elif a_[1] in ["var str", "literal str"] and b_[1] in ["var str", "literal str"]:
+                    match op:
+                        case "+": return (a + b)
+                        case "in": return int(a in b)
+
+                elif a_[1] in ["var str", "literal str"] and b_[1] in ["var int", "literal int"]:
+                    match op:
+                        case "index": return (a[b])
+                        case "pop": return (a.pop(b))
+                        case "*": return (a * b)
+            elif len(token) == 2:
+                a_ = parseValue(token[1])
+                op = token[0]
+                a = a_[0]
+                if a_[1] in ["var str", "literal str"]:
+                    match op:
+                        case "len": return (len(a))
+                        case "not": return (not a)
+                elif a_[1] in ["var int", "literal int"]:
+                    match op: #cbrt sqrt not ~ tan sin cos
+                        case "cbrt": return (math.cbrt(a))
+                        case "sqrt": return (math.sqrt(a))
+                        case "not": return (not a)
+                        case "~": return (~a)
+                        case "-": return (-a)
+                        case "tan": return (math.tan(a))
+                        case "sin": return (math.sin(a))
+                        case "cos": return (math.cos(a))
+            return 0
+
+    print(SafeEval("x - 1",    mathParcer))
+    print(SafeEval("x + _", mathParcer))
+    print(SafeEval("x // 12",  mathParcer))
+    print(SafeEval("10 / -2",     mathParcer))
+    print(SafeEval("12 * 3",      mathParcer))
+    print(SafeEval("3 + 7 / 2",   mathParcer))
+    print(SafeEval("'hello' index 0", mathParcer))
+    print(SafeEval("'hello' index 1", mathParcer))
+    print(SafeEval("'hello' index 2", mathParcer))
+    print(SafeEval("'hello' index 3", mathParcer))
+    print(SafeEval("'hello' index 4", mathParcer))
