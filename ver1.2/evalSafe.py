@@ -137,3 +137,4 @@ if __name__ == "__main__":
     f(SafeEval("arg1 // 12", f))
     f(SafeEval("10 / -2", f))
     f(SafeEval("12 * 3", f))
+    f(SafeEval("3 + 7 / 2", f))
