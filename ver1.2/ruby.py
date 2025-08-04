@@ -1,8 +1,5 @@
 import subprocess, traceback
 import random, math, re, time, string, hashlib
-from io import StringIO
-from contextlib import redirect_stdout
-from xml.dom import SyntaxErr
 from requests import get
 from evalSafe import SafeEval
 
@@ -81,7 +78,7 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
             elif a_[1] in ["var str", "literal str"] and b_[1] in ["var int", "literal int"]:
                 match op:
                     case "index": return (a[b])
-                    case "pop": return (a.pop(b))
+                    case "pop": return (''.join((lambda l: (l.pop(b), l)[1])(list(a))))
                     case "*": return (a * b)
         elif len(token) == 2:
             a_ = parseValue(token[1])
@@ -123,6 +120,7 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
     # Initialize global state
     variables = {"return": None}
     whileLoops = []
+    forLoops = [] # [forStart, ...]
     functionIndexs = {"main": {}}
     functionStack = []
 
@@ -194,6 +192,49 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
                     var, expression = equation.split("=")
                     value = SafeEval(expression.strip(), mathParcer)
                     variables[var.strip()] = value
+
+                case "for":
+                    match args[0]:
+                        case "begin":
+                            if line.count(":") > 1:
+                                raise SyntaxError(f"for on line {current_index} in {current_source} has more than one ':'")
+
+                            data = line.strip().split(":")[1]
+                            var, initValue, expression, deltaValue = map(str.strip, data.split(";"))
+
+                            # Initialize the variable
+                            variables[var] = SafeEval(initValue, mathParcer)
+
+                            # Always push this index to the loop stack
+                            forLoops.append(current_index)
+
+                            # Check the loop condition
+                            if not SafeEval(expression, mathParcer):
+                                # Skip ahead to "for end"
+                                for i, line_ in enumerate(current_lines[current_index:]):
+                                    tokens = tokenize(line_)
+                                    if tokens and tokens[0:2] == ["for", "end"]:
+                                        current_index += i
+                                        break
+
+                        case "end":
+                            if not forLoops:
+                                raise SyntaxError("Unexpected 'for end' with no matching 'for begin'")
+
+                            # Go back to the matching begin line
+                            line_index = forLoops[-1]  # don't pop yet
+                            line_ = current_lines[line_index]
+                            var, initValue, expression, deltaValue = map(str.strip, line_.split(":")[1].split(";"))
+
+                            # Increment
+                            variables[var] += SafeEval(deltaValue, mathParcer)
+
+                            # Recheck the condition
+                            if SafeEval(expression, mathParcer):
+                                current_index = line_index
+                            else:
+                                forLoops.pop()  # exit loop
+
 
 
                 case "while":
@@ -400,7 +441,7 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
                 case "try":
                     except_line = None
                     for i, line_ in enumerate(current_lines[current_index:len(current_lines)]):
-                        if tokenize(line_)[0] == "execept":
+                        if tokenize(line_) and tokenize(line_)[0] == "execept":
                             except_line = current_index + i
                     if not except_line:
                         raise SyntaxError(f"try has not endeing execept line | line {current_index} in {current_source} | try-execpt error")
@@ -530,7 +571,59 @@ def fib 1
     endfunc
 call fib 10
 ''')
-runRuby('''
-var _ = "hi" index 0
-print _
+    runRuby('''
+    var _ = "hi" index 0
+    print _
+    ''')
+    runRuby('''
+var x = 5
+var y = 10
+var z = x + y * 2
+var greeting = "hi" * 3            
+var truthy = 1 and 2
+var falsy = 0 or ""
+var ch = "hello" index 1           
+var popChar = "hi" pop 1          
+var randNum = 0
+var randWord = 0
+
+rnd int randNum 1 100
+rnd str randWord 5
+
+
+def add 2
+  var _ = arg1 + arg2
+  return _
+
+endfunc
+
+call add 7 8
+print return
+            
+if begin true
+  print "Condition is true"
+if end
+
+var counter = 4
+while begin
+  print "Counting:" counter
+  var counter = counter - 1
+while end counter
+
+print ch ", " popChar
+print "Hello " greeting ", " z ", " randNum ", " randWord
+
+delay 1
+
+try
+  error "Boom!"
+execept
+  print "Caught error:" Error
+done
+
+    ''')
+    runRuby('''
+for begin : i; 0; i < 10; 1
+print i
+for end 
 ''')
