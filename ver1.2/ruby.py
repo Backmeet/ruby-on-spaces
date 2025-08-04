@@ -74,6 +74,8 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
                 match op:
                     case "+": return (a + b)
                     case "in": return int(a in b)
+                    case "==": return int(a == b)
+                    case "!=": return int(a != b)
 
             elif a_[1] in ["var str", "literal str"] and b_[1] in ["var int", "literal int"]:
                 match op:
@@ -626,4 +628,8 @@ done
 for begin : i; 0; i < 10; 1
 print i
 for end 
+            
+for begin : i; ""; i != "*****"; "*"
+print i
+for end
 ''')
