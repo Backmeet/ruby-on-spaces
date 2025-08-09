@@ -1,19 +1,32 @@
 import subprocess, traceback
-import random, math, re, time, string, hashlib
+import random, math, re, time
+import string, hashlib
 from requests import get
 from evalSafe import SafeEval
+
+RAW_BASE_URL = 'https://raw.githubusercontent.com/Backmeet/ruby-on-spaces/main'
+def getFileText(filePath):
+    url = f"{RAW_BASE_URL}/{filePath}"
+    try:
+        r = get(url)
+        if r.status_code != 200:
+            raise Exception(f"Failed to fetch text — Status code: {r.status_code}")
+        return r.text
+    except Exception as e:
+        print(f"[ERROR] getFileText failed for {filePath}: {e}")
+        raise
 
 def StableHash(text: str, filename: str = ""):
     data = f"{filename}\n{text}".encode('utf-8')
     return hashlib.sha512(data).hexdigest()
 
 
-def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, stdLibPath:str=r"https://api.github.com/repos/Backmeet/ruby-on-spaces/contents/code-examples/stdlib/stdLib.ru") -> str:
+def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, stdLibPath:str=r"gitPath:code-examples/stdlib/stdLib.ru") -> str:
     initBounded = bound
 
     # Load stdlib from URL or file
-    if stdLibPath.startswith("http://") or stdLibPath.startswith("https://"):
-        stdLibCode = get(stdLibPath).text
+    if stdLibPath.startswith("gitPath:"):
+        stdLibCode = getFileText(stdLibPath[8:])
     else:
         stdLibCode = open(stdLibPath).read()
 
@@ -31,10 +44,12 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
         except:
             return False
 
-    s = re.compile(r'\s*//')
-    t = re.compile(r'''"[^"]*"|'[^']*'|\S+''')
+    s = re.compile(r'\s*//')  # matches and removes // comments
+    # Match: [anything in brackets], "quoted strings", 'quoted strings', or any non-space chunk
+    t = re.compile(r'''\[[^\]]*\]|"[^"]*"|'[^']*'|\S+''')
 
     def tokenize(line: str):
+        # remove comments, then tokenize
         return t.findall(s.split(line, maxsplit=1)[0])
 
     def sourceToFile(source:str):
@@ -58,7 +73,7 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
                 match op: # + - * / // ^ | & == != >= <= < > and or
                     case "+": return a + b
                     case "-": return a - b
-                    case "/": return a // b
+                    case "/": return a / b
                     case "*": return a * b
                     case "//": return a // b
                     case "**": return a ** b
@@ -80,12 +95,17 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
                     case "==": return (a == b)
                     case "!=": return (a != b)
 
-            elif a_[1] in ["var str", "literal str"] and b_[1] in ["var int", "literal int"]:
+            elif (a_[1] in ["var str", "literal str"]) and b_[1] in ["var int", "literal int"]:
                 match op:
                     case "index": return (a[b])
                     case "pop": return (''.join((lambda l: (l.pop(b), l)[1])(list(a))))
                     case "*": return (a * b)
-                    
+            
+            elif (a_[1] in ["var list", "literal list"]) and b_[1] in ["var int", "literal int"]:
+                match op:
+                    case "index": return (parseValue(a[b])[0])
+                    case "*": return (a * b)
+
         elif len(token) == 2:
             a_ = parseValue(token[1])
             op = token[0]
@@ -94,6 +114,12 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
                 match op:
                     case "len": return (len(a))
                     case "not": return (not a)
+            
+            if a_[1] in ["var list", "literal list"]:
+                match op:
+                    case "len": return (len(a))
+                    case "not": return (not a)
+            
             elif a_[1] in ["var int", "literal int"]:
                 match op: #cbrt sqrt not ~ tan sin cos
                     case "cbrt": return (math.cbrt(a))
@@ -106,20 +132,36 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
                     case "cos": return (math.cos(a))
         return 0
 
-    def parseValue(valueStr, varContext=None):
-        if varContext is None:
-            varContext = variables
+    def parseValue(valueStr, varContext=None, functionContext=None):
+        if varContext is None: varContext = variables
+        if functionContext is None: functionContext = functionIndexs
+        
         if valueStr.lower() == "null": return 0, "literal int"
         if valueStr.lower() == "none": return 0, "literal int"
         if valueStr.lower() == "nil": return 0, "literal int"
         if valueStr.lower() == "true": return 1, "literal int"
+        
         if valueStr in varContext:
             val = varContext[valueStr]
-            return val, "var int" if isinstance(val, (int, float)) else "var str"
+            return val, "var list" if isinstance(val, list) else ("var int" if isinstance(val, (int, float)) else "var str")
+        
         elif (valueStr.startswith('"') and valueStr.endswith('"')) or (valueStr.startswith("'") and valueStr.endswith("'")):
             return valueStr[1:-1], "literal str"
+        
+        elif valueStr.startswith("func(") and valueStr.endswith(")"):
+            func_name = valueStr[5:-1]
+            if func_name in functionContext[current_source]:
+                return (current_source, func_name), "func"
+            else:
+                raise NameError(f"Function {func_name} not defined | line {current_index} in {current_source}")
+
         elif isdigit(valueStr):
             return (float(valueStr) if "." in valueStr else int(valueStr)), "literal int"
+        
+        elif (valueStr.startswith('[') and valueStr.endswith(']')): # list
+            items = tokenize(valueStr[1:-1])
+            return items, "literal list"
+        
         else:
             raise ValueError(f"Value | {valueStr} | is not valid | line {current_index} in {current_source} |")
 
@@ -185,7 +227,7 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
                             length = parseValue(args[2])
                             if parsed1[1] not in ["var int", "var str"]:
                                 raise NameError(f"Can not assign a random string value to a literal on line {current_index} in {current_source}")
-                            if origin[1] not in ["literal int", "var int"] or stop[1] not in ["literal int", "var int"]:
+                            if length[1] not in ["literal int", "var int"]:
                                 raise ValueError(f"length has to be a int for a random str genreation on line {current_index} in {current_source}")
                             
                             _ = ""
@@ -198,6 +240,95 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
                     var, expression = equation.split("=")
                     value = SafeEval(expression.strip(), mathParcer)
                     variables[var.strip()] = value
+
+                case "list":
+                    match args[0]:
+                        case "append":
+                            parsed1 = parseValue(args[1])
+                            parsed2 = parseValue(args[2])
+                            
+                            if parsed1[1] not in ["var list", "literal list"]:
+                                raise NameError(f"Can not append a value to a literal on line {current_index} in {current_source}")
+
+                            variables[parsed1[0]].append(args[2])
+
+                        case "extend":
+                            parsed1 = parseValue(args[1])
+                            parsed2 = parseValue(args[2])
+                            
+                            if parsed1[1] not in ["var list", "literal list"]:
+                                raise NameError(f"Can not append a value to a literal on line {current_index} in {current_source}")
+
+                            if parsed2[1] not in ["var list", "literal list"]:
+                                raise NameError(f"Can not extend a literal with a non-list value on line {current_index} in {current_source}")
+                            
+                            variables[parsed1[0]].extend(args[2])
+                        
+                        case "pop":
+                            parsed1 = parseValue(args[1])
+                            parsed2 = parseValue(args[2])
+
+                            if parsed1[1] not in ["var list", "literal list"]:
+                                raise NameError(f"Can not pop a value from a literal on line {current_index} in {current_source}")
+                        
+                            if parsed2[1] not in ["var int", "literal int"]:
+                                raise ValueError(f"pop index has to be a int for a list pop on line {current_index} in {current_source}")
+                            
+                            if parsed2[0] < 0 or parsed2[0] >= len(parsed1[0]):
+                                raise IndexError(f"pop index out of range | line {current_index} in {current_source} | pop index error")
+
+                            popped_value = variables[parsed1[0]].pop(parsed2[0])
+                            variables["return"] = popped_value  # Store popped value in return variable
+                        
+                        case "attatch": # attach a function to a list so class hell ya
+                            parsed1 = parseValue(args[1])
+                            parsed2 = parseValue(args[2])
+
+                            if parsed1[1] not in ["var list", "literal list"]:
+                                raise NameError(f"Can not attatch a function to a literal on line {current_index} in {current_source}")
+                            
+                            if parsed2[1] != "func":
+                                raise ValueError(f"attatch value has to be a function for a list attatch on line {current_index} in {current_source}")
+                            
+                            variables[parsed1[0]].append(parsed2[0])  # Append the function to the list
+
+                        case "call": # call a function from a list | list call <list>.<func_name> <arg1> <arg2> ...
+
+                            if args[1].count(".") != 1:
+                                raise SyntaxError(f"list call on line {current_index} in {current_source} has more than one '.'")
+                            
+                            list_name, func_name = args[1].split(".")
+                            parsed1 = parseValue(list_name)
+                            
+                            if parsed1[1] not in ["var list", "literal list"]:
+                                raise NameError(f"Can not call a function from a literal on line {current_index} in {current_source}")
+                            
+                            if func_name not in parsed1[0]:
+                                raise NameError(f"Function {func_name} not found in list {list_name} | line {current_index} in {current_source}")
+
+                            for idx, item in enumerate(parsed1[0]):
+                                if isinstance(item, tuple) and item[1] == func_name:
+                                    func_source, func_name = item                                    
+                                    start_index, num_args, end_index = functionIndexs[func_source][func_name]
+                                    
+                                    if len(args[2:]) != num_args:
+                                        raise ValueError(f"Function {func_name} expects {num_args} arguments, got {len(args[2:])} | line {current_index} in {current_source}")
+
+                                    # Set up arguments
+                                    for arg_idx, arg in enumerate(args[2:]):
+                                        variables[f"arg{arg_idx+1}"] = parseValue(arg)[0]
+
+                                    # Save current position to return to
+                                    functionStack.append((current_source, current_index + 1))
+
+                                    # Switch to called function
+                                    current_source = func_source
+                                    current_lines = sources[current_source]
+                                    current_index = start_index
+                                    break
+                            
+
+
 
                 case "for":
                     match args[0]:
@@ -447,13 +578,13 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
                 case "try":
                     except_line = None
                     for i, line_ in enumerate(current_lines[current_index:len(current_lines)]):
-                        if tokenize(line_) and tokenize(line_)[0] == "execept":
+                        if tokenize(line_) and tokenize(line_)[0] == "except":
                             except_line = current_index + i
                     if not except_line:
-                        raise SyntaxError(f"try has not endeing execept line | line {current_index} in {current_source} | try-execpt error")
+                        raise SyntaxError(f"try has not endeing except line | line {current_index} in {current_source} | try-execpt error")
                     INTRY = [True, except_line, None]
 
-                case "execept":
+                case "except":
                     ErrorData = INTRY
                     INTRY = [False, None, None]
                     if ErrorData[0]: # this is valid syntax bro
@@ -465,7 +596,7 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
                                 if tokenize(line_)[0] == "done":
                                     current_index += i
                     else:
-                        raise SyntaxError(f"stray execept found with no parent try | line {current_index} in {current_source} | stray execept error")
+                        raise SyntaxError(f"stray except found with no parent try | line {current_index} in {current_source} | stray except error")
                 
                 case "done":
                     pass 
@@ -523,7 +654,7 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
 
                     try
                     code...
-                    execept
+                    except
                     code...
                     done
 
@@ -623,7 +754,7 @@ delay 1
 
 try
   error "Boom!"
-execept
+except
   print "Caught error:" Error
 done
 
