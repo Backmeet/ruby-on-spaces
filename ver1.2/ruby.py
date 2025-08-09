@@ -44,6 +44,9 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
             return source_dict[source]                    
 
     def mathParcer(token):
+        def tostr(d):
+            return f"'{d}'"
+        
         if len(token) == 3:
             a_ = parseValue(token[0])
             op = token[1]
@@ -72,16 +75,17 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
                     case "or": return int(a or b)
             elif a_[1] in ["var str", "literal str"] and b_[1] in ["var str", "literal str"]:
                 match op:
-                    case "+": return (a + b)
+                    case "+": return a + b
                     case "in": return int(a in b)
-                    case "==": return int(a == b)
-                    case "!=": return int(a != b)
+                    case "==": return (a == b)
+                    case "!=": return (a != b)
 
             elif a_[1] in ["var str", "literal str"] and b_[1] in ["var int", "literal int"]:
                 match op:
                     case "index": return (a[b])
                     case "pop": return (''.join((lambda l: (l.pop(b), l)[1])(list(a))))
                     case "*": return (a * b)
+                    
         elif len(token) == 2:
             a_ = parseValue(token[1])
             op = token[0]
@@ -198,7 +202,7 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
                 case "for":
                     match args[0]:
                         case "begin":
-                            if line.count(":") > 1:
+                            if line.count(":") != 1:
                                 raise SyntaxError(f"for on line {current_index} in {current_source} has more than one ':'")
 
                             data = line.strip().split(":")[1]
@@ -629,7 +633,7 @@ for begin : i; 0; i < 10; 1
 print i
 for end 
             
-for begin : i; ""; i != "*****"; "*"
+for begin : i; ""; i != "******"; "*"
 print i
 for end
 ''')

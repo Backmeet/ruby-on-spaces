@@ -150,8 +150,9 @@ if __name__ == "__main__":
 
     variables = {
         "x":0,
-        "y":"'hello, world'",
-        "_":0
+        "y":"hello, world",
+        "_":0,
+        "i":10
     }
 
     
@@ -180,61 +181,63 @@ if __name__ == "__main__":
             raise ValueError(f"Value | {valueStr} | is not valid ")
 
     def mathParcer(token):
-            if len(token) == 3:
-                a_ = parseValue(token[0])
-                op = token[1]
-                b_ = parseValue(token[2])
-                a = a_[0]
-                b = b_[0]
+        if len(token) == 3:
+            a_ = parseValue(token[0])
+            op = token[1]
+            b_ = parseValue(token[2])
+            a = a_[0]
+            b = b_[0]
 
-                if a_[1] in ["var int", "literal int"] and b_[1] in ["var int", "literal int"]:
-                    match op: # + - * / // ^ | & == != >= <= < > and or
-                        case "+": return a + b
-                        case "-": return a - b
-                        case "/": return a // b
-                        case "*": return a * b
-                        case "//": return a // b
-                        case "**": return a ** b
-                        case "^": return a ^ b
-                        case "|": return a | b
-                        case "&": return a & b
-                        case "==": return int(a == b)
-                        case "!=": return int(a != b)
-                        case ">=": return int(a >= b)
-                        case "<=": return int(a <= b)
-                        case ">": return int(a > b)
-                        case "<": return int(a < b)
-                        case "and": return int(a and b)
-                        case "or": return int(a or b)
-                elif a_[1] in ["var str", "literal str"] and b_[1] in ["var str", "literal str"]:
-                    match op:
-                        case "+": return (a + b)
-                        case "in": return int(a in b)
+            if a_[1] in ["var int", "literal int"] and b_[1] in ["var int", "literal int"]:
+                match op: # + - * / // ^ | & == != >= <= < > and or
+                    case "+": return a + b
+                    case "-": return a - b
+                    case "/": return a // b
+                    case "*": return a * b
+                    case "//": return a // b
+                    case "**": return a ** b
+                    case "^": return a ^ b
+                    case "|": return a | b
+                    case "&": return a & b
+                    case "==": return int(a == b)
+                    case "!=": return int(a != b)
+                    case ">=": return int(a >= b)
+                    case "<=": return int(a <= b)
+                    case ">": return int(a > b)
+                    case "<": return int(a < b)
+                    case "and": return int(a and b)
+                    case "or": return int(a or b)
+            elif a_[1] in ["var str", "literal str"] and b_[1] in ["var str", "literal str"]:
+                match op:
+                    case "+": return (a + b)
+                    case "in": return (int(a in b))
+                    case "==": return (a == b)
+                    case "!=": return (a != b)
 
-                elif a_[1] in ["var str", "literal str"] and b_[1] in ["var int", "literal int"]:
-                    match op:
-                        case "index": return (a[b])
-                        case "pop": return (a.pop(b))
-                        case "*": return (a * b)
-            elif len(token) == 2:
-                a_ = parseValue(token[1])
-                op = token[0]
-                a = a_[0]
-                if a_[1] in ["var str", "literal str"]:
-                    match op:
-                        case "len": return (len(a))
-                        case "not": return (not a)
-                elif a_[1] in ["var int", "literal int"]:
-                    match op: #cbrt sqrt not ~ tan sin cos
-                        case "cbrt": return (math.cbrt(a))
-                        case "sqrt": return (math.sqrt(a))
-                        case "not": return (not a)
-                        case "~": return (~a)
-                        case "-": return (-a)
-                        case "tan": return (math.tan(a))
-                        case "sin": return (math.sin(a))
-                        case "cos": return (math.cos(a))
-            return 0
+            elif a_[1] in ["var str", "literal str"] and b_[1] in ["var int", "literal int"]:
+                match op:
+                    case "index": return (a[b])
+                    case "pop": return (''.join((lambda l: (l.pop(b), l)[1])(list(a))))
+                    case "*": return (a * b)
+        elif len(token) == 2:
+            a_ = parseValue(token[1])
+            op = token[0]
+            a = a_[0]
+            if a_[1] in ["var str", "literal str"]:
+                match op:
+                    case "len": return (len(a))
+                    case "not": return (not a)
+            elif a_[1] in ["var int", "literal int"]:
+                match op: #cbrt sqrt not ~ tan sin cos
+                    case "cbrt": return (math.cbrt(a))
+                    case "sqrt": return (math.sqrt(a))
+                    case "not": return (not a)
+                    case "~": return (~a)
+                    case "-": return (-a)
+                    case "tan": return (math.tan(a))
+                    case "sin": return (math.sin(a))
+                    case "cos": return (math.cos(a))
+        return 0
 
     print(SafeEval("x - 1",    mathParcer))
     print(SafeEval("x + _", mathParcer))
@@ -247,3 +250,4 @@ if __name__ == "__main__":
     print(SafeEval("'hello' index 2", mathParcer))
     print(SafeEval("'hello' index 3", mathParcer))
     print(SafeEval("'hello' index 4", mathParcer))
+    print(SafeEval("'*' * i", mathParcer))
