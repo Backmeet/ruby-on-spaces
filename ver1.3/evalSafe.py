@@ -1,16 +1,41 @@
 import re, math
 
-token_pattern = re.compile(
-    r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|==|!=|>=|<=|//|\*\*|'
+base_pattern = re.compile(
+    r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|'
+    r'==|!=|>=|<=|//|\*\*|'
     r'and|or|not|index|in|pop|len|sqrt|cbrt|sin|cos|tan|'
     r'\d+\.?\d*|\w+|[()+\-*/%^<>=|&~]'
 )
 
+def tokenizeBrackets(s):
+    tokens = []
+    i = 0
+    while i < len(s):
+        if s[i] == '[':
+            start = i
+            depth = 0
+            while i < len(s):
+                if s[i] == '[':
+                    depth += 1
+                elif s[i] == ']':
+                    depth -= 1
+                    if depth == 0:
+                        i += 1
+                        break
+                i += 1
+            tokens.append(s[start:i])
+        else:
+            m = base_pattern.match(s, i)
+            if m:
+                tokens.append(m.group(0))
+                i = m.end()
+            else:
+                i += 1
+    return tokens
+
 def SafeEval(expr: str, expressionParcer):
     # Tokenize
-    tokens = token_pattern.findall(
-        expr
-    )
+    tokens = tokenizeBrackets(expr)
 
     if len(tokens) == 1:
         tokens.extend(["*", "1"])
@@ -108,6 +133,10 @@ def SafeEval(expr: str, expressionParcer):
             output.append(token)
             expect_operand = False
 
+        elif token.startswith("[") and token.endswith("]"):  # list literal
+            output.append(token)
+            expect_operand = False
+
         elif token == '(':
             stack.append(('paren', token))
             expect_operand = True
@@ -135,12 +164,22 @@ def SafeEval(expr: str, expressionParcer):
     def evaluate(node):
         if isinstance(node, str):
             return node
-        if len(node) == 2:  # unary
+        
+        if len(node) == 2:
             op, a = node
-            return expressionParcer([op, str(evaluate(a))])
+            aval = evaluate(a)
+            return expressionParcer([op, aval if isinstance(aval, list) else str(aval)])
+
         elif len(node) == 3:  # binary
             a, op, b = node
-            return expressionParcer([str(evaluate(a)), op, str(evaluate(b))])
+            aval = evaluate(a)
+            bval = evaluate(b)
+            # Only convert to str if not a list
+            return expressionParcer([
+                aval if isinstance(aval, list) else str(aval),
+                op,
+                bval if isinstance(bval, list) else str(bval)
+            ])
 
     return evaluate(ast)
 

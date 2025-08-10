@@ -20,17 +20,17 @@ def StableHash(text: str, filename: str = ""):
     data = f"{filename}\n{text}".encode('utf-8')
     return hashlib.sha512(data).hexdigest()
 
+stdLibPath:str=r"gitPath:code-examples/stdlib/stdLib.ru"
 
-def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, stdLibPath:str=r"gitPath:code-examples/stdlib/stdLib.ru") -> str:
+# Load stdlib from URL or file
+if stdLibPath.startswith("gitPath:"):
+    stdLibCode = getFileText(stdLibPath[8:])
+else:
+    stdLibCode = open(stdLibPath).read()
+stdLibHash = StableHash(stdLibCode)
+
+def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True) -> str:
     initBounded = bound
-
-    # Load stdlib from URL or file
-    if stdLibPath.startswith("gitPath:"):
-        stdLibCode = getFileText(stdLibPath[8:])
-    else:
-        stdLibCode = open(stdLibPath).read()
-
-    stdLibHash = StableHash(stdLibCode)
     sources = {"main": main_code.splitlines()}
 
     files = {}
@@ -59,8 +59,6 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
             return source_dict[source]                    
 
     def mathParcer(token):
-        def tostr(d):
-            return f"'{d}'"
         
         if len(token) == 3:
             a_ = parseValue(token[0])
@@ -143,18 +141,15 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
         
         if valueStr in varContext:
             val = varContext[valueStr]
-            return val, "var list" if isinstance(val, list) else ("var int" if isinstance(val, (int, float)) else "var str")
-        
+            type_ = ""
+            if isinstance(val, list): type_ = "var list"
+            elif isinstance(val, int) or isinstance(val, float): type_ = "var int"
+            elif isinstance(val, str): type_ = "var str"
+
+            return val, type_
         elif (valueStr.startswith('"') and valueStr.endswith('"')) or (valueStr.startswith("'") and valueStr.endswith("'")):
             return valueStr[1:-1], "literal str"
         
-        elif valueStr.startswith("func(") and valueStr.endswith(")"):
-            func_name = valueStr[5:-1]
-            if func_name in functionContext[current_source]:
-                return (current_source, func_name), "func"
-            else:
-                raise NameError(f"Function {func_name} not defined | line {current_index} in {current_source}")
-
         elif isdigit(valueStr):
             return (float(valueStr) if "." in valueStr else int(valueStr)), "literal int"
         
@@ -163,6 +158,11 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
             return items, "literal list"
         
         else:
+            for _, functions in functionIndexs.items():
+                for name, data in functions.items():
+                    if name == valueStr:
+                        return (_, name), "func"
+                    
             raise ValueError(f"Value | {valueStr} | is not valid | line {current_index} in {current_source} |")
 
     # Initialize global state
@@ -243,6 +243,21 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
 
                 case "list":
                     match args[0]:
+                        case "set": # list set <list> <index> to <value>
+                            if len(args) != 5 or args[3].lower() != "to":
+                                raise SyntaxError(f"list set syntax error | line {current_index} in {current_source} | list set syntax error")
+                            
+                            parsed1 = parseValue(args[1])
+                            parsed2 = parseValue(args[2])
+                            parseValue(args[4])
+
+                            if parsed1[1] not in ["var list", "literal list"]:
+                                raise NameError(f"Can not set a value to a literal on line {current_index} in {current_source}")
+                            if parsed2[1] not in ["var int", "literal int"]:
+                                raise ValueError(f"list set index has to be a int for a list set on line {current_index} in {current_source}")
+
+                            variables[parsed1[0]][parsed2[0]] = args[4]  # Set the value at the specified index
+
                         case "append":
                             parsed1 = parseValue(args[1])
                             parsed2 = parseValue(args[2])
@@ -262,7 +277,7 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
                             if parsed2[1] not in ["var list", "literal list"]:
                                 raise NameError(f"Can not extend a literal with a non-list value on line {current_index} in {current_source}")
                             
-                            variables[parsed1[0]].extend(args[2])
+                            variables[parsed1[0]].extend(parsed2[0])
                         
                         case "pop":
                             parsed1 = parseValue(args[1])
@@ -279,18 +294,6 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
 
                             popped_value = variables[parsed1[0]].pop(parsed2[0])
                             variables["return"] = popped_value  # Store popped value in return variable
-                        
-                        case "attatch": # attach a function to a list so class hell ya
-                            parsed1 = parseValue(args[1])
-                            parsed2 = parseValue(args[2])
-
-                            if parsed1[1] not in ["var list", "literal list"]:
-                                raise NameError(f"Can not attatch a function to a literal on line {current_index} in {current_source}")
-                            
-                            if parsed2[1] != "func":
-                                raise ValueError(f"attatch value has to be a function for a list attatch on line {current_index} in {current_source}")
-                            
-                            variables[parsed1[0]].append(parsed2[0])  # Append the function to the list
 
                         case "call": # call a function from a list | list call <list>.<func_name> <arg1> <arg2> ...
 
@@ -303,29 +306,33 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
                             if parsed1[1] not in ["var list", "literal list"]:
                                 raise NameError(f"Can not call a function from a literal on line {current_index} in {current_source}")
                             
-                            if func_name not in parsed1[0]:
-                                raise NameError(f"Function {func_name} not found in list {list_name} | line {current_index} in {current_source}")
+                            for item in parsed1[0]:
+                                parsedItem = parseValue(item)
+                                if item == func_name and parsedItem[1] == "func":
+                                    src, name = parsedItem[0]
 
-                            for idx, item in enumerate(parsed1[0]):
-                                if isinstance(item, tuple) and item[1] == func_name:
-                                    func_source, func_name = item                                    
-                                    start_index, num_args, end_index = functionIndexs[func_source][func_name]
-                                    
-                                    if len(args[2:]) != num_args:
-                                        raise ValueError(f"Function {func_name} expects {num_args} arguments, got {len(args[2:])} | line {current_index} in {current_source}")
+                                    startIndex, num_args, endIndex = functionIndexs[src][name]
+
+                                    if len(args[1:]) != num_args:
+                                        raise ValueError(f"Function {func_name} expects {num_args} arguments, got {len(args[1:])} | line {current_index} in {current_source}")
 
                                     # Set up arguments
-                                    for arg_idx, arg in enumerate(args[2:]):
-                                        variables[f"arg{arg_idx+1}"] = parseValue(arg)[0]
-
+                                    for idx, arg in enumerate(args[1:]):
+                                        variables[f"arg{idx+1}"] = parseValue(arg)[0]
+                                                    
                                     # Save current position to return to
                                     functionStack.append((current_source, current_index + 1))
 
                                     # Switch to called function
-                                    current_source = func_source
-                                    current_lines = sources[current_source]
-                                    current_index = start_index
-                                    break
+                                    current_source = src
+                                    current_lines = sources[src]
+                                    current_index = startIndex
+                                    continue
+                                    
+                            else:
+                                raise NameError(f"Function {func_name} not found in list {list_name} | line {current_index} in {current_source}")
+
+                                
                             
 
 
@@ -680,7 +687,7 @@ def runRuby(main_code: str, source_dict: dict[str, str] = {}, bound:bool=True, s
             print("Variables:")
             for k, v in variables.items():
                 print(f"{k}: {v}")
-            print("Sources:", list(sources.keys()))
+            print("\nSources:", list(sources.keys()))
             print(f"Current source: {current_source} | Hash: {StableHash(sourceToFile(current_source))}")
             print("Function Indexes:")
             for src, funcs in functionIndexs.items():
@@ -767,4 +774,20 @@ for end
 for begin : i; ""; i != "******"; "*"
 print i
 for end
+''')
+    runRuby('''
+var myClass = [0]
+def increment 1
+    var self = arg1
+    var _ = (self index 0) + 1
+    list set self 0 _
+endfunc
+list attatch myClass increment 
+
+var myClassInstance = myClass
+
+print (myClassInstance index 0)
+list call myClassInstance.increment
+print (myClassInstance index 0)
+            
 ''')
