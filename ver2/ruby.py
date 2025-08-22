@@ -14,7 +14,7 @@ TOKEN_SPEC = [
 TOKEN_RE = re.compile("|".join(f"(?P<{n}>{p})" for n, p in TOKEN_SPEC))
 
 KEYWORDS = {
-    "def", "return", "end", "while", "for", "in", "true", "false", "null"
+    "def", "return", "end", "while", "for", "in", "true", "false", "null", "if"
 }
 
 class Token:
@@ -99,14 +99,18 @@ class Parser:
     def parse_block_until_end(self, allow_top_level=False, terminators=("end",)):
         stmts = []
         self.skip_semi_nl()
-        while self.cur.kind != "EOF" and self.cur.text not in terminators:
+        while self.cur.kind != "EOF":
             if self.cur.kind == "NL" or self.cur.text == ";":
                 self.advance()
                 continue
+            if self.cur.text in terminators:
+                break
             stmts.append(self.parse_stmt())
             self.skip_semi_nl()
             if allow_top_level and self.cur.kind == "EOF":
                 break
+        if "end" in terminators:
+            self.expect("end")
         return stmts
 
     def parse_stmt(self):
@@ -125,6 +129,11 @@ class Parser:
             body = self.parse_block_until_end(terminators=("end",))
             self.expect("end")
             return {"type":"while", "cond":cond, "body":body}
+        if self.cur.text == "if":
+            self.advance()
+            cond = self.parse_expression()
+            body = self.parse_block_until_end()
+            return {"type":"if", "cond":cond, "body":body}
         if self.cur.text == "for":
             return self.parse_for()
         # assignment or expr-stmt
@@ -515,6 +524,11 @@ def exec_stmt(node, env):
         return
     if t == "while":
         while is_truthy(eval_expr(node["cond"], env)):
+            exec_block(node["body"], Env(env))
+        return
+    if t == "if":
+        cond = eval_expr(node["cond"], env)
+        if is_truthy(cond):
             exec_block(node["body"], Env(env))
         return
     if t == "for_in":
