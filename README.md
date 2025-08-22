@@ -10,34 +10,42 @@ It’s **minimal, hackable, and verbose by design**. The goal isn’t clean synt
 ## Features
 - Fully interpreted in Python
 - Syntax loosely inspired by Ruby (blocks, `def`, `end`, etc.)
-- Two core types: `number` (int/float) and `string`
+- core types: `number` (int/float), `string`, `list`, `dict`, `bool`, `null`
 - Mutable variables (backed by Python dictionaries)
-- Basic control flow (`if`, `while`)
+- Basic control flow (`if`, `while`, `for`)
 - Functions with arguments and `return`
-- Simple I/O (`print`, `input`)
-- Text/graphics support through a lightweight Pygame window system
-
+- Simple I/O (`print`, `input` ... (made my injecting python))
 ---
 
 ## Example Code
 ```ruby
 # variables
-var new x 10
-var new y 20
-
+x = 10
+y = 20
 # math
-var math x + y = result
-print "Sum:" result
+z = x + y
+print "Sum:" z
 
 # control flow
-if begin result
-    print "Result is non-zero"
-if end
+if (10 == 2)
+print("10 is == to 2! (very much worng)")
+end
+
+while (true)
+print("yes")
+end
+
+for x in [1, 2, 3]
+print(x)
+end
+
+for (x = 0; x != 0; x++)
+print(x)
+end
 
 # functions
-def greet name
-    print "Hello," name
-endfunc
+def greet(name)
+    print("hello! " + str(name))
+end
 
-greet "World"
-
+greet ("World")
