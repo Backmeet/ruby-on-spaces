@@ -1,7 +1,7 @@
 # Ruby on Spaces
 
 **Ruby on Spaces** is a tiny experimental language written in Python.  
-It started as a learning project for exploring **interpreters, parsing, and language design**, and can serve as a skeleton for building your own language — whether you’re aiming for the next Rust, Zig, or just want to play around with language concepts.
+It started as a learning project for exploring **interpreters, parsing, and language design**, and can serve as a skeleton for building your own language — whether you’re aiming for the next c++, python or just want to play around with language concepts.
 
 It’s **minimal, hackable, and verbose by design**. The goal isn’t clean syntax or speed, but to show how a language can be built from the ground up with just Python’s standard library (plus `pygame` for optional graphics).
 
