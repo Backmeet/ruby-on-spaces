@@ -309,7 +309,6 @@ function Parser:parse_for()
 		self:expect(")")
 		self:skip_semi_nl()
 		local body = self:parse_block_until_end(false, { "end" })
-		self:expect("end")
 		return { type = "for_c", init = init, cond = cond, step = step, body = body }
 	else
 		local var = self:expect("ID").text
@@ -716,6 +715,7 @@ local function as_lvalue(node, env)
 end
 
 function exec_stmt(node, env)
+	task.wait()
 	local t = node.type
 	if t == "assign" then
 		local _get, setter = as_lvalue(node.target, env)
