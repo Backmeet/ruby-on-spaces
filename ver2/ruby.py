@@ -127,7 +127,6 @@ class Parser:
             self.expect(")")
             self.skip_semi_nl()
             body = self.parse_block_until_end(terminators=("end",))
-            self.expect("end")
             return {"type":"while", "cond":cond, "body":body}
         if self.cur.text == "if":
             self.advance()
