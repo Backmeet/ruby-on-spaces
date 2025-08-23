@@ -147,7 +147,18 @@ class Parser:
 
     def parse_def(self):
         self.expect("def")
-        name = self.expect("ID").text
+
+        # First identifier
+        name1 = self.expect("ID").text
+
+        # Check if this is obj.method
+        if self.cur.text == ".":
+            self.advance()
+            name2 = self.expect("ID").text
+            full = {"type":"methoddef", "obj":name1, "name":name2}
+        else:
+            full = {"type":"def", "name":name1}
+
         self.expect("(")
         params = []
         if not self.match(")"):
@@ -157,10 +168,12 @@ class Parser:
                 if self.match(")"):
                     break
                 self.expect(",")
+
         self.skip_semi_nl()
         body = self.parse_block_until_end(terminators=("end",))
-        self.expect("end")
-        return {"type":"def", "name": name, "params": params, "body": body}
+
+        full.update({"params": params, "body": body})
+        return full
 
     def parse_for(self):
         self.expect("for")
@@ -450,12 +463,27 @@ def eval_expr(node, env):
         if op == ">=": return a >= b
         if op == "==": return a == b
         if op == "!=": return a != b
+
     if t == "call":
-        fn = eval_expr(node["func"], env)
+        funcnode = node["func"]
+
+        # If calling obj.method(...)
+        if funcnode["type"] == "prop":
+            obj = eval_expr(funcnode["object"], env)
+            fn = obj.get(funcnode["name"])
+            if not isinstance(fn, Function):
+                raise TypeError("Attempt to call non-function property")
+            args = [eval_expr(a, env) for a in node["args"]]
+            # inject self as first arg
+            return fn([obj] + args)
+
+        # Normal call (just call expression result)
+        fn = eval_expr(funcnode, env)
         if not isinstance(fn, Function):
             raise TypeError("Attempt to call non-function")
         args = [eval_expr(a, env) for a in node["args"]]
         return fn(args)
+
     if t == "index":
         obj = eval_expr(node["object"], env)
         idx = eval_expr(node["index"], env)
@@ -522,6 +550,15 @@ def exec_stmt(node, env):
         fn = Function(node["name"], node["params"], node["body"], Env(env))
         env.set_here(node["name"], fn)
         return
+
+    if t == "methoddef":
+        target = env.get(node["obj"])
+        if not isinstance(target, dict):
+            raise RuntimeError(f"{node['obj']} is not an object")
+        target[node["name"]] = Function(node["name"], node["params"], node["body"], Env(env))
+        return
+
+
     if t == "while":
         while is_truthy(eval_expr(node["cond"], env)):
             exec_block(node["body"], Env(env))
