@@ -715,7 +715,7 @@ local function as_lvalue(node, env)
 end
 
 function exec_stmt(node, env)
-	task.wait()
+	task.wait(0.02)
 	local t = node.type
 	if t == "assign" then
 		local _get, setter = as_lvalue(node.target, env)
