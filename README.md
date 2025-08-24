@@ -1,6 +1,6 @@
 # Ruby on Spaces
 
-**Ruby on Spaces** is a small experimental programming language built entirely in Python.  
+**Ruby on Spaces** is a small experimental programming language built entirely in Python (with a luau port for ver 2.1).  
 It’s designed as a learning project in **language design, parsing, and interpreter building**, while still being usable for toy projects, scripting, or experimentation.
 
 This language is **minimal, hackable, and deliberately verbose**.  
@@ -10,7 +10,7 @@ It’s not about performance — it’s about showing how a working interpreter 
 
 ## Overview
 
-- **Implemented in**: Pure Python (no external libraries except optional `pygame` for demos).  
+- **Implemented in**: Pure Python (and the luau port).  
 - **Execution model**: Lex → Parse (Pratt parser) → AST → Tree-walking interpreter.  
 - **Syntax style**: Ruby-like with `def`, `end`, `while`, `if`, but Python-like in strictness.  
 - **Core philosophy**: Easy to extend — you can add new syntax, keywords, or built-ins by editing one file.
@@ -144,15 +144,45 @@ person.greet()
 
 ## Extending the Language
 
-1. **Add a builtin function (Python interop)**  
-   ```python
-   def py_upper(args_wrapped):
-       s = unwrap_from_py(args_wrapped[0])
-       return wrap_for_py(s.upper())
+1. **Add a builtin function (host interop)**
 
-   env = make_global_env()
-   register_pyfunc(env, "upper", py_upper)
-    ```
+  a. Python interop
+  Example:
+  ```py
+  def py_upper(args_wrapped):
+      s = unwrap_from_py(args_wrapped[0])  # convert ROS types <-> Python types
+      return wrap_for_py(s.upper())
+
+  env = make_global_env()  # base env with builtins
+  register_pyfunc(env, "upper", py_upper)
+  run('''
+  print(upper("hello, world"))
+  end
+  ''')
+  ```
+
+  b. Luau (Roblox) interop
+  Example:
+  ```lua
+  local ROSL = require(...)
+  local function concat(args)
+    if #args ~= 2 then
+      error("function concat requires 2 args")
+    end
+    local vals = ROSL.unwrapArgs(args)
+    if typeof(vals[1]) == "string" and typeof(vals[2]) == "string" then
+      return ROSL.wrap(vals[1]..vals[2])
+    else
+      error("function concat requires all args be string")
+    end
+  end
+  local env = ROSL.BasicEnv()
+  ROSL.registorFunc(env, "concat", concat)
+  ROSL.run([[
+    print(concat("Hello, ", "World"))
+    end
+  ]], env)
+```
 2. **Add new keywords / syntax**  
    - Update `KEYWORDS` in the lexer  
    - Add parsing rules in `Parser.parse_stmt` or `Parser.nud/led`  
