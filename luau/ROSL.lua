@@ -2,7 +2,7 @@
 
 local KEYWORDS = {
 	["def"] = true, ["return"] = true, ["end"] = true, ["while"] = true, ["for"] = true, ["in"] = true,
-			["true"] = true, ["false"] = true, ["null"] = true, ["if"] = true,
+	["true"] = true, ["false"] = true, ["null"] = true, ["if"] = true,
 }
 
 local function makeToken(kind, text, line, col)
@@ -62,7 +62,7 @@ local function lex(src)
 			local startCol = col
 			while peek() == " " or peek() == "\t" do advance() end
 			-- skip emitting WS tokens (like Python version)
-			 continue
+			continue
 		end
 
 		-- Newlines (support \r\n or \n)
@@ -75,7 +75,7 @@ local function lex(src)
 			end
 			push(makeToken("NL", "\n", line, startCol))
 			line += 1; col = 1
-			 continue
+			continue
 		end
 
 		-- Number: \d+ or \d+.\d+
@@ -89,7 +89,7 @@ local function lex(src)
 			end
 			local text = src:sub(start, i-1)
 			push(makeToken("NUMBER", text, line, startCol))
-			 continue
+			continue
 		end
 
 		-- String: " ... " with escapes
@@ -114,7 +114,7 @@ local function lex(src)
 			if not closed then error(string.format("Unexpected EOF in string at %d:%d", line, startCol)) end
 			local raw = table.concat(buf)
 			push(makeToken("STRING", '"'..raw..'"', line, startCol))
-			 continue
+			continue
 		end
 
 		-- Identifier / keyword
@@ -129,7 +129,7 @@ local function lex(src)
 			else
 				push(makeToken("ID", text, line, startCol))
 			end
-			 continue
+			continue
 		end
 
 		-- Operators and punctuation (match two-char first)
@@ -138,7 +138,7 @@ local function lex(src)
 			local startCol = col
 			advance(); advance()
 			push(makeToken(two, two, line, startCol))
-			 continue
+			continue
 		end
 		local singleOps = {
 			["+"] = true, ["-"] = true, ["*"] = true, ["/"] = true,
@@ -151,7 +151,7 @@ local function lex(src)
 			local startCol = col
 			advance()
 			push(makeToken(c, c, line, startCol))
-			 continue
+			continue
 		end
 
 		error(string.format("Unexpected character %q at %d:%d", c, line, col))
@@ -928,10 +928,37 @@ function run(src, env)
 	return env
 end
 
+-- ===== (Un)wraper ======
+function unwrapArgs(args)
+	local vals = {}
+	for i = 1, #args do
+		local x = unwrap_from_lua(args[i])
+		if x == NULL then x = nil end
+		vals[#vals+1] = x
+	end
+	return vals
+end
+
+function wrapReturn(returnTable)
+	local vals = {}
+	for i = 1, #returnTable do
+		local x = wrap_for_lua(returnTable[i])
+		if x == NULL then x = nil end
+		vals[#vals+1] = x
+	end
+	return vals
+end
+
+
 return {
 	["run"] = run,
+	["BasicEnv"] = make_global_env,	
 	["Env"] = Env,
-	["BasicEnv"] = make_global_env,
 	["Function"] = FunctionVal,
-	["registorFunc"] = register_luafunc
+	["registorFunc"] = register_luafunc,
+	["unwarp"] = unwrap_from_lua,
+	["warp"] = wrap_for_lua,
+	["ROSNIL"] = NULL,
+	["unwrapArgs"] = unwrapArgs,
+	["warpReturn"] = wrapReturn
 }
