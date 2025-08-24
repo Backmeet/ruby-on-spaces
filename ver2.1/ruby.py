@@ -14,7 +14,7 @@ TOKEN_SPEC = [
 TOKEN_RE = re.compile("|".join(f"(?P<{n}>{p})" for n, p in TOKEN_SPEC))
 
 KEYWORDS = {
-    "def", "return", "end", "while", "for", "in", "true", "false", "null", "if"
+    "def", "return", "end", "while", "for", "in", "true", "false", "null", "if", "import"
 }
 
 class Token:
@@ -93,7 +93,6 @@ class Parser:
 
     def parse(self):
         body = self.parse_block_until_end(allow_top_level=True)
-        self.expect("EOF")
         return {"type":"block", "stmts": body}
 
     def parse_block_until_end(self, allow_top_level=False, terminators=("end",)):
@@ -133,6 +132,10 @@ class Parser:
             cond = self.parse_expression()
             body = self.parse_block_until_end()
             return {"type":"if", "cond":cond, "body":body}
+        if self.cur.text == "import":
+            self.advance()
+            fileName = self.parse_expression()
+            return {"type":"import", "fileName":fileName}
         if self.cur.text == "for":
             return self.parse_for()
         # assignment or expr-stmt
@@ -568,6 +571,18 @@ def exec_stmt(node, env):
         if is_truthy(cond):
             exec_block(node["body"], Env(env))
         return
+    if t == "import":
+        fileName = eval_expr(node["fileName"], env)
+        files = env.get("__importables__")
+        if not isinstance(fileName, str):
+            raise TypeError("import path must be a string")
+        if fileName not in files:
+            raise FileNotFoundError(f"Module '{fileName}' not found")
+        runEnv = run(files[fileName], make_global_env(files))
+        module = runEnv.get("module")
+        env.set(fileName, module)
+        return
+
     if t == "for_in":
         iterable = eval_expr(node["iter"], env)
         if not isinstance(iterable, list):
@@ -652,7 +667,7 @@ ROS = {
     "ver": "BETA (ver2)"
 }
 
-def make_global_env():
+def make_global_env(files):
     g = Env()
     g.set_here("print" , Function("print" , ["*values"]  , None, g, escapeToPython=True, pyfunc=py_print))
     g.set_here("len"   , Function("len"   , ["x"]        , None, g, escapeToPython=True, pyfunc=py_len  ))
@@ -662,6 +677,7 @@ def make_global_env():
     g.set_here("split" , Function("split" , ["x", "sep"] , None, g, escapeToPython=True, pyfunc=py_split))
     g.set_here("execPy", Function("execPy", ["code"]     , None, g, escapeToPython=True, pyfunc=py_exec ))
     g.set_here("ROS"   , ROS)
+    g.set_here("__importables__", files)
     return g
 
 def register_pyfunc(env, name, pyfunc):

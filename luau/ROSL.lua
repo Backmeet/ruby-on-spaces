@@ -1,8 +1,31 @@
+-- ===== Sleep =====
+local function sleep(sec)
+    if task ~= nil then
+        task.wait(sec)
+    elseif wait then
+        wait(sec)
+    elseif os and os.clock then
+        -- fallback for Luau CLI (busy loop)
+        local t0 = os.clock()
+        while os.clock() - t0 < sec do end
+    else
+        -- nothing available: no-op
+    end
+end
+-- needed because luau cli does not have a task thing
+
 -- ===== Lexer =====
+
+local function wait(n)
+    local start = os.clock()
+    while os.clock() - start < n do
+        coroutine.yield()
+    end
+end
 
 local KEYWORDS = {
 	["def"] = true, ["return"] = true, ["end"] = true, ["while"] = true, ["for"] = true, ["in"] = true,
-	["true"] = true, ["false"] = true, ["null"] = true, ["if"] = true,
+	["true"] = true, ["false"] = true, ["null"] = true, ["if"] = true, ["import"] = true
 }
 
 local function makeToken(kind, text, line, col)
@@ -259,6 +282,11 @@ function Parser:parse_stmt()
 		local cond = self:parse_expression()
 		local body = self:parse_block_until_end()
 		return { type = "if", cond = cond, body = body }
+	end
+	if self.cur.text == "import" then
+		self:advance()
+		local p = self:parse_expression()
+		return { type = "import", Filename = p}
 	end
 	if self.cur.text == "for" then
 		return self:parse_for()
@@ -730,71 +758,6 @@ local function as_lvalue(node, env)
 	error("Invalid left-hand side")
 end
 
-function exec_stmt(node, env)
-	task.wait(0.02)
-	local t = node.type
-	if t == "assign" then
-		local _get, setter = as_lvalue(node.target, env)
-		local value = eval_expr(node.expr, env)
-		setter(value)
-		return
-	end
-	if t == "exprstmt" then eval_expr(node.expr, env); return end
-	if t == "return" then
-		local val = eval_expr(node.expr, env)
-		error(ReturnSignal.new(val))
-	end
-	if t == "def" then
-		local fn = FunctionVal.new(node.name, node.params, node.body, Env.new(env))
-		env:set_here(node.name, fn)
-		return
-	end
-	if t == "methoddef" then
-		local target = env:get(node.obj)
-		if not is_dict(target) then error(node.obj .. " is not an object") end
-		target[node.name] = FunctionVal.new(node.name, node.params, node.body, Env.new(env))
-		return
-	end
-	if t == "while" then
-		while is_truthy(eval_expr(node.cond, env)) do
-			exec_block(node.body, Env.new(env))
-		end
-		return
-	end
-	if t == "if" then
-		local cond = eval_expr(node.cond, env)
-		if is_truthy(cond) then
-			exec_block(node.body, Env.new(env))
-		end
-		return
-	end
-	if t == "for_in" then
-		local iterable = eval_expr(node.iter, env)
-		if not is_list(iterable) then error("for-in expects a list") end
-		for i = 1, #iterable do
-			env:set(node.var, iterable[i])
-			exec_block(node.body, Env.new(env))
-		end
-		return
-	end
-	if t == "for_c" then
-		exec_stmt(node.init, env)
-		while is_truthy(eval_expr(node.cond, env)) do
-			exec_block(node.body, Env.new(env))
-			exec_stmt(node.step, env)
-		end
-		return
-	end
-	if t == "block" then exec_block(node.stmts, env); return end
-	error("Unknown statement " .. tostring(t))
-end
-
-function exec_block(stmts, env)
-	for _, s in ipairs(stmts) do
-		exec_stmt(s, env)
-	end
-end
-
 -- ===== Builtins and Lua interop =====
 
 local function lu_print(args_wrapped)
@@ -929,18 +892,92 @@ local function make_global_env()
 	return g
 end
 
+function exec_stmt(node, env, files)
+	sleep(0.02)
+	local t = node.type
+	local files = files
+	if t == "assign" then
+		local _get, setter = as_lvalue(node.target, env)
+		local value = eval_expr(node.expr, env)
+		setter(value)
+		return
+	end
+	if t == "exprstmt" then eval_expr(node.expr, env); return end
+	if t == "return" then
+		local val = eval_expr(node.expr, env)
+		error(ReturnSignal.new(val))
+	end
+	if t == "def" then
+		local fn = FunctionVal.new(node.name, node.params, node.body, Env.new(env))
+		env:set_here(node.name, fn)
+		return
+	end
+	if t == "methoddef" then
+		local target = env:get(node.obj)
+		if not is_dict(target) then error(node.obj .. " is not an object") end
+		target[node.name] = FunctionVal.new(node.name, node.params, node.body, Env.new(env))
+		return
+	end
+	if t == "while" then
+		while is_truthy(eval_expr(node.cond, env)) do
+			exec_block(node.body, Env.new(env))
+		end
+		return
+	end
+	if t == "if" then
+		local cond = eval_expr(node.cond, env)
+		if is_truthy(cond) then
+			exec_block(node.body, Env.new(env))
+		end
+		return 
+	end
+	if t == "import" then
+		local fileName = eval_expr(node.Filename, env) 
+		if files[fileName] ~= nil then
+			local ranEnv = run(files[fileName], make_global_env(), files)
+			env:set_here(fileName, ranEnv:get("module"))
+		end
+		return
+	end
+	if t == "for_in" then
+		local iterable = eval_expr(node.iter, env)
+		if not is_list(iterable) then error("for-in expects a list") end
+		for i = 1, #iterable do
+			env:set(node.var, iterable[i])
+			exec_block(node.body, Env.new(env))
+		end
+		return
+	end
+	if t == "for_c" then
+		exec_stmt(node.init, env)
+		while is_truthy(eval_expr(node.cond, env)) do
+			exec_block(node.body, Env.new(env))
+			exec_stmt(node.step, env)
+		end
+		return
+	end
+	if t == "block" then exec_block(node.stmts, env, files); return end
+	error("Unknown statement " .. tostring(t))
+end
+
+function exec_block(stmts, env, files)
+	for _, s in ipairs(stmts) do
+		exec_stmt(s, env, files)
+	end
+end
+
 local function register_luafunc(env, name, luafunc)
 	env:set_here(name, FunctionVal.new(name, {"*args"}, nil, env, true, luafunc))
 end
 
 -- ===== Runner =====
 
-function run(src, env)
+function run(src, env, files)
 	local tokens = lex(src)
 	local parser = Parser.new(tokens)
 	local ast = parser:parse()
 	if env == nil then env = make_global_env() end
-	exec_stmt(ast, env)
+	exec_stmt(ast, env, files)
 	return env
 end
 
