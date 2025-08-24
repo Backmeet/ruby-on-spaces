@@ -879,7 +879,7 @@ end
 
 local ROS = { ver = "BETA (ver2)" }
 
-local function make_global_env()
+local function make_global_env(files)
 	local g = Env.new()
 	g:set_here("print",  FunctionVal.new("print",  {"*values"},  nil, g, true, lu_print))
 	g:set_here("len",    FunctionVal.new("len",    {"x"},        nil, g, true, lu_len  ))
@@ -889,13 +889,13 @@ local function make_global_env()
 	g:set_here("split",  FunctionVal.new("split",  {"x","sep"}, nil, g, true, lu_split))
 	g:set_here("execLua",FunctionVal.new("execLua",{"code"},     nil, g, true, lu_exec ))
 	g:set_here("ROS", ROS)
+	g:set_here("__importables__", files)
 	return g
 end
 
-function exec_stmt(node, env, files)
+function exec_stmt(node, env)
 	sleep(0.02)
 	local t = node.type
-	local files = files
 	if t == "assign" then
 		local _get, setter = as_lvalue(node.target, env)
 		local value = eval_expr(node.expr, env)
@@ -933,6 +933,7 @@ function exec_stmt(node, env, files)
 	end
 	if t == "import" then
 		local fileName = eval_expr(node.Filename, env) 
+		local files = env:get("__importables__")
 		if files[fileName] ~= nil then
 			local ranEnv = run(files[fileName], make_global_env(), files)
 			env:set_here(fileName, ranEnv:get("module"))
@@ -956,13 +957,13 @@ function exec_stmt(node, env, files)
 		end
 		return
 	end
-	if t == "block" then exec_block(node.stmts, env, files); return end
+	if t == "block" then exec_block(node.stmts, env); return end
 	error("Unknown statement " .. tostring(t))
 end
 
-function exec_block(stmts, env, files)
+function exec_block(stmts, env)
 	for _, s in ipairs(stmts) do
-		exec_stmt(s, env, files)
+		exec_stmt(s, env)
 	end
 end
 
@@ -972,12 +973,12 @@ end
 
 -- ===== Runner =====
 
-function run(src, env, files)
+function run(src, env)
 	local tokens = lex(src)
 	local parser = Parser.new(tokens)
 	local ast = parser:parse()
 	if env == nil then env = make_global_env() end
-	exec_stmt(ast, env, files)
+	exec_stmt(ast, env)
 	return env
 end
 
