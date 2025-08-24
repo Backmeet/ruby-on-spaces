@@ -97,11 +97,16 @@ end
 greet("World")
 
 # Methods on objects
-person = { name: "Alice" }
+person = {}
+def person.new(self, name)
+    self.name = name
+end
 def person.greet(self)
     print("Hi, I'm", self.name)
 end
-person.greet()
+allen = person
+allen.new("allen")
+allen.greet()
 ```
 ## Syntax Reference
 
