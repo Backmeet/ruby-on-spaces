@@ -931,6 +931,7 @@ end
 return {
 	["run"] = run,
 	["Env"] = Env,
+	["BasicEnv"] = make_global_env,
 	["Function"] = FunctionVal,
 	["registorFunc"] = register_luafunc
 }
