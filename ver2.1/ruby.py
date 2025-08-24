@@ -1,5 +1,5 @@
 import re
-import sys
+import sys, copy
 
 # ===== Lexer =====
 TOKEN_SPEC = [
@@ -350,6 +350,8 @@ def unwrap_from_py(obj):
         return {k: unwrap_from_py(x) for k, x in v.items()}
     raise TypeError(f"Unsupported wrapped type from py: {t}")
 
+
+
 class Env:
     def __init__(self, parent=None):
         self.parent = parent
@@ -361,13 +363,13 @@ class Env:
             return self.parent.get(name)
         raise NameError(f"Undefined variable {name}")
     def set_here(self, name, value):
-        self.map[name] = value
+        self.map[name] = copy.deepcopy(value)
     def set(self, name, value):
         scope = self.resolve_scope(name)
         if scope is None:
-            self.map[name] = value
+            self.map[name] = copy.deepcopy(value)
         else:
-            scope.map[name] = value
+            scope.map[name] = copy.deepcopy(value)
     def resolve_scope(self, name):
         if name in self.map:
             return self

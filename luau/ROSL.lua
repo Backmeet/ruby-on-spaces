@@ -507,6 +507,22 @@ local function unwrap_from_lua(obj)
 	error("Unsupported wrapped type from lua: " .. tostring(t))
 end
 
+function deep_copy(orig, copies)
+    if type(orig) ~= "table" then
+        return orig
+    end
+    copies = copies or {}
+    if copies[orig] then
+        return copies[orig]
+    end
+    local copy = {}
+    copies[orig] = copy
+    for k, v in pairs(orig) do
+        copy[deep_copy(k, copies)] = deep_copy(v, copies)
+    end
+    return setmetatable(copy, getmetatable(orig))
+end
+
 local Env = {}
 Env.__index = Env
 function Env.new(parent)
@@ -518,7 +534,7 @@ function Env:get(name)
 	error("Undefined variable " .. tostring(name))
 end
 function Env:set_here(name, value)
-	self.map[name] = value
+	self.map[name] = deep_copy(value)
 end
 function Env:resolve_scope(name)
 	if self.map[name] ~= nil then return self end
@@ -527,7 +543,7 @@ function Env:resolve_scope(name)
 end
 function Env:set(name, value)
 	local scope = self:resolve_scope(name)
-	if scope == nil then self.map[name] = value else scope.map[name] = value end
+	if scope == nil then self.map[name] = deep_copy(value) else scope.map[name] = deep_copy(value) end
 end
 
 local FunctionVal = {}
