@@ -956,9 +956,9 @@ return {
 	["Env"] = Env,
 	["Function"] = FunctionVal,
 	["registorFunc"] = register_luafunc,
-	["unwarp"] = unwrap_from_lua,
-	["warp"] = wrap_for_lua,
+	["unwrap"] = unwrap_from_lua,
+	["wrap"] = wrap_for_lua,
 	["ROSNIL"] = NULL,
 	["unwrapArgs"] = unwrapArgs,
-	["warpReturn"] = wrapReturn
+	["wrapReturn"] = wrapReturn
 }
