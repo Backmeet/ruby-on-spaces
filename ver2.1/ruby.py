@@ -1,5 +1,5 @@
-import re
-import sys, copy
+import re, types
+import sys, copy, os
 
 # ===== Lexer =====
 TOKEN_SPEC = [
@@ -321,20 +321,82 @@ class ReturnSignal(Exception):
 def wrap_for_py(val):
     if val is None:
         return {"type":"null", "value": None}
+    
     if isinstance(val, bool):
         return {"type":"bool", "value": val}
+    
     if isinstance(val, (int, float)):
         return {"type":"number", "value": val}
+    
     if isinstance(val, str):
         return {"type":"string", "value": val}
+    
     if isinstance(val, (list, tuple)):
         return {"type":"list", "value": [wrap_for_py(v) for v in val]}
+    
     if isinstance(val, dict):
         # plain dict values wrapped
         return {"type":"dict", "value": {k: wrap_for_py(v) for k, v in val.items()}}
+    
     if isinstance(val, Function):
         return val
+
+    if isinstance(val, type):
+        members = {}
+        for k, v in vars(val).items():
+            if k.startswith("__") and k.endswith("__"):
+                continue  # skip Python internals
+            if callable(v):
+                members[k] = {"type": "function", "value": Function(
+                    name=k,
+                    params=[],
+                    body=None,
+                    env=None,
+                    escapeToPython=True,
+                    pyfunc=lambda args, f=v: f(*[unwrap_from_py(a) for a in args])
+                )}
+            else:
+                members[k] = wrap_for_py(v)  # recurse
+        return {"type": "dict", "value": members}
+
+    if hasattr(val, "__dict__"):
+        members = {}
+        for k, v in vars(val).items():
+            if k.startswith("__") and k.endswith("__"):
+                continue  # skip dunder attrs
+            if callable(v):
+                members[k] = {"type": "function", "value": Function(
+                    name=k,
+                    params=[],
+                    body=None,
+                    env=None,
+                    escapeToPython=True,
+                    pyfunc=lambda args, f=v: f(*[unwrap_from_py(a) for a in args])
+                )}
+            else:
+                members[k] = wrap_for_py(v)  # recurse
+        return {"type": "dict", "value": members}
+
+    if isinstance(val, types.ModuleType):
+        members = {}
+        for k, v in vars(val).items():
+            if k.startswith("__") and k.endswith("__"):
+                continue  # skip internals
+            if callable(v):
+                members[k] = {"type": "function", "value": Function(
+                    name=k,
+                    params=[],
+                    body=None,
+                    env=None,
+                    escapeToPython=True,
+                    pyfunc=lambda args, f=v: f(*[unwrap_from_py(a) for a in args])
+                )}
+            else:
+                members[k] = wrap_for_py(v)  # recurse
+        return {"type": "dict", "value": members}
+    
     raise TypeError(f"Unsupported type for wrap: {type(val)}")
+
 
 def unwrap_from_py(obj):
     t = obj.get("type")
@@ -364,7 +426,7 @@ class Env:
             return self.map[name]
         if self.parent:
             return self.parent.get(name)
-        raise NameError(f"Undefined variable {name}")
+        raise NameError(f"Undefined variable {name} in context {''.join([f'\n{x}: {y}' for x, y in self.map.items()])}")
     def set_here(self, name, value):
         self.map[name] = copy.deepcopy(value)
     def set(self, name, value):
@@ -576,11 +638,11 @@ def exec_stmt(node, env):
         files = env.get("__importables__")
         if not isinstance(fileName, str):
             raise TypeError("import path must be a string")
-        if fileName not in files:
+        if fileName not in files.keys():
             raise FileNotFoundError(f"Module '{fileName}' not found")
         runEnv = run(files[fileName], make_global_env(files))
         module = runEnv.get("module")
-        env.set(fileName, module)
+        env.set(fileName.split(".")[0], module)
         return
 
     if t == "for_in":
@@ -652,16 +714,52 @@ def py_split(args_wrapped):
         raise TypeError("can not split with a non string")
     return wrap_for_py(vals[0].split(vals[1]))
 
+py_globals = {}
+py_locals = py_globals  # both point to same dict
+
 def py_exec(args_wrapped):
     vals = [unwrap_from_py(a) for a in args_wrapped]
     if len(vals) == 1:
         if isinstance(vals[0], str):
-            exec(vals[0])
+            exec(vals[0], py_globals, py_locals)
         elif isinstance(vals[0], list):
-            exec("".join(vals[0]))
+            exec("".join(vals[0]), py_globals, py_locals)
     else:
-        exec("".join(vals))
+        exec("".join(vals), py_globals, py_locals)
     return {"type":"null", "value": None}
+
+def py_eval(args_wrapped):
+    vals = [unwrap_from_py(a) for a in args_wrapped]
+    if len(vals) == 1:
+        if isinstance(vals[0], str):
+            return wrap_for_py(eval(vals[0], py_globals, py_locals))
+        else:
+            raise TypeError("evalPy expects a string")
+    else:
+        raise TypeError("evalPy expects 1 argument")
+
+def py_cast(args_wrapped):
+    vals = [unwrap_from_py(a) for a in args_wrapped]
+    if len(vals) == 2:
+
+        try:    
+            match vals[1]:
+                case "str":
+                    return wrap_for_py(str(vals[0]))
+                case "int":
+                    return wrap_for_py(int(vals[0]))
+                case "float":
+                    return wrap_for_py(float(vals[0]))
+                case "list":
+                    return wrap_for_py(list(vals[0]))
+                case "dict":
+                    return wrap_for_py(dict(vals[0]))
+                case _:
+                    raise TypeError(f"Unknown type: {vals[1]}")
+        except Exception as e:
+            raise TypeError(f"Failed to cast {vals[0]} to {vals[1]}: {e}")
+        return warp_for_py(None)
+
 
 ROS = {
     "ver": "BETA (ver2)"
@@ -669,13 +767,15 @@ ROS = {
 
 def make_global_env(files):
     g = Env()
-    g.set_here("print" , Function("print" , ["*values"]  , None, g, escapeToPython=True, pyfunc=py_print))
-    g.set_here("len"   , Function("len"   , ["x"]        , None, g, escapeToPython=True, pyfunc=py_len  ))
-    g.set_here("range" , Function("range" , ["a","b","c"], None, g, escapeToPython=True, pyfunc=py_range))
-    g.set_here("upper" , Function("upper" , ["x"]        , None, g, escapeToPython=True, pyfunc=py_upper))
-    g.set_here("lower" , Function("lower" , ["x"]        , None, g, escapeToPython=True, pyfunc=py_lower))
-    g.set_here("split" , Function("split" , ["x", "sep"] , None, g, escapeToPython=True, pyfunc=py_split))
-    g.set_here("execPy", Function("execPy", ["code"]     , None, g, escapeToPython=True, pyfunc=py_exec ))
+    g.set_here("print" , Function("print" , ["*values"]       , None, g, escapeToPython=True, pyfunc=py_print))
+    g.set_here("len"   , Function("len"   , ["x"]             , None, g, escapeToPython=True, pyfunc=py_len  ))
+    g.set_here("range" , Function("range" , ["a","b","c"]     , None, g, escapeToPython=True, pyfunc=py_range))
+    g.set_here("upper" , Function("upper" , ["x"]             , None, g, escapeToPython=True, pyfunc=py_upper))
+    g.set_here("lower" , Function("lower" , ["x"]             , None, g, escapeToPython=True, pyfunc=py_lower))
+    g.set_here("split" , Function("split" , ["x", "sep"]      , None, g, escapeToPython=True, pyfunc=py_split))
+    g.set_here("execPy", Function("execPy", ["code"]          , None, g, escapeToPython=True, pyfunc=py_exec ))
+    g.set_here("evalPy", Function("evalPy", ["expression"]    , None, g, escapeToPython=True, pyfunc=py_eval ))
+    g.set_here("cast"  , Function("cast"  , ["value", "type"] , None, g, escapeToPython=True, pyfunc=py_cast ))
     g.set_here("ROS"   , ROS)
     g.set_here("__importables__", files)
     return g
@@ -690,7 +790,7 @@ def run(src, env=None):
     parser = Parser(tokens)
     ast = parser.parse()
     if env is None:
-        env = make_global_env()
+        env = make_global_env({})
     exec_stmt(ast, env)
     return env
 
@@ -698,10 +798,27 @@ def run(src, env=None):
 
 
 if __name__ == "__main__":
+
+    def read_files_recursive(path):
+        files_dict = {}
+        for root, dirs, files in os.walk(path):
+            for fname in files:
+                fpath = os.path.join(root, fname)
+                try:
+                    with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+                        files_dict[fname] = f.read()
+                except Exception as e:
+                    files_dict[fname] = f"[Error reading file: {e}]"
+        return files_dict
+
+\\
     if len(sys.argv) > 1:
         with open(sys.argv[1], "r", encoding="utf-8") as f:
             code = f.read()
-        run(code)
+        if sys.argv[2] == "--libs" and os.path.exists(sys.argv[3]):
+            run(code, make_global_env(read_files_recursive(sys.argv[3])))
+        else:
+            run(code)
     else:
         lineNo = 0
         toExec = []
