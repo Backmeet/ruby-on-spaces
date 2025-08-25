@@ -810,8 +810,7 @@ if __name__ == "__main__":
                 except Exception as e:
                     files_dict[fname] = f"[Error reading file: {e}]"
         return files_dict
-
-\\
+        
     if len(sys.argv) > 1:
         with open(sys.argv[1], "r", encoding="utf-8") as f:
             code = f.read()
