@@ -476,7 +476,7 @@ def get_indexed(obj, index):
         return obj[index]
     if isinstance(obj, dict):
         return obj[index]
-    raise TypeError("Indexing only supported on list and dict")
+    raise TypeError(f"Indexing only supported on list and dict not on {type(obj)} of value {obj}")
 
 def set_indexed(obj, index, value):
     if isinstance(obj, list):
@@ -740,6 +740,28 @@ def py_eval(args_wrapped):
     else:
         raise TypeError("evalPy expects 1 argument")
 
+typesTable = {
+    types.NoneType: "nil",
+    int: "number",
+    float: "number",
+    str: "str",
+    list: "list",
+    dict: "obj"
+}
+def py_type(args_wrapped):
+    vals = [unwrap_from_py(a) for a in args_wrapped]
+    if len(vals) == 1:
+        obj = vals[0]
+        return wrap_for_py(typesTable.get(type(obj), "unknown"))
+    raise TypeError("type expects 1 argument")
+
+def py_isType(args_wrapped):
+    vals = [unwrap_from_py(a) for a in args_wrapped]
+    if len(vals) == 2:
+        obj, type_name = vals
+        return wrap_for_py(typesTable.get(type(obj), "unknown") == type_name)
+    raise TypeError("isType expects 2 arguments")
+
 def py_cast(args_wrapped):
     vals = [unwrap_from_py(a) for a in args_wrapped]
     if len(vals) == 2:
@@ -769,15 +791,18 @@ ROS = {
 
 def make_global_env(files):
     g = Env()
-    g.set_here("print" , Function("print" , ["*values"]       , None, g, escapeToPython=True, pyfunc=py_print))
-    g.set_here("len"   , Function("len"   , ["x"]             , None, g, escapeToPython=True, pyfunc=py_len  ))
-    g.set_here("range" , Function("range" , ["a","b","c"]     , None, g, escapeToPython=True, pyfunc=py_range))
-    g.set_here("upper" , Function("upper" , ["x"]             , None, g, escapeToPython=True, pyfunc=py_upper))
-    g.set_here("lower" , Function("lower" , ["x"]             , None, g, escapeToPython=True, pyfunc=py_lower))
-    g.set_here("split" , Function("split" , ["x", "sep"]      , None, g, escapeToPython=True, pyfunc=py_split))
-    g.set_here("execPy", Function("execPy", ["code"]          , None, g, escapeToPython=True, pyfunc=py_exec ))
-    g.set_here("evalPy", Function("evalPy", ["expression"]    , None, g, escapeToPython=True, pyfunc=py_eval ))
-    g.set_here("cast"  , Function("cast"  , ["value", "type"] , None, g, escapeToPython=True, pyfunc=py_cast ))
+    g.set_here("print" , Function("print" , ["*values"]       , None, g, escapeToPython=True, pyfunc=py_print ))
+    g.set_here("len"   , Function("len"   , ["x"]             , None, g, escapeToPython=True, pyfunc=py_len   ))
+    g.set_here("range" , Function("range" , ["a","b","c"]     , None, g, escapeToPython=True, pyfunc=py_range ))
+    g.set_here("upper" , Function("upper" , ["x"]             , None, g, escapeToPython=True, pyfunc=py_upper ))
+    g.set_here("lower" , Function("lower" , ["x"]             , None, g, escapeToPython=True, pyfunc=py_lower ))
+    g.set_here("split" , Function("split" , ["x", "sep"]      , None, g, escapeToPython=True, pyfunc=py_split ))
+    g.set_here("execPy", Function("execPy", ["code"]          , None, g, escapeToPython=True, pyfunc=py_exec  ))
+    g.set_here("evalPy", Function("evalPy", ["expression"]    , None, g, escapeToPython=True, pyfunc=py_eval  ))
+    g.set_here("cast"  , Function("cast"  , ["value", "type"] , None, g, escapeToPython=True, pyfunc=py_cast  ))
+    g.set_here("type"  , Function("type"  , ["value"]         , None, g, escapeToPython=True, pyfunc=py_type  ))
+    g.set_here("isType", Function("isType", ["value", "type"] , None, g, escapeToPython=True, pyfunc=py_isType))
+
     g.set_here("ROS"   , ROS)
     g.set_here("__importables__", files)
     return g
