@@ -825,6 +825,7 @@ if __name__ == "__main__":
         print("Type 'RUN' to execute block, 'CLEAR' to clear block, 'SAVE <path>' to save block into a file, 'LOAD <path>' to load a file.")
         lineNo = 1
         toExec = []
+        lastRan = []
         maxDigits = 4
         while True:
             try:
@@ -833,6 +834,7 @@ if __name__ == "__main__":
                 if striped.startswith("RUN"):
                     code = "\n".join(toExec)
                     run(code)
+                    lastRan = toExec
                     toExec = []
                     lineNo = 1
                     continue
@@ -857,6 +859,12 @@ if __name__ == "__main__":
                             print(f"[{str(i + 1).zfill(maxDigits)}]> {line.strip()}")
 
                     continue
+
+                elif striped.startswith("LAST"):
+                    for i, line in enumerate(lastRan):
+                        print(f"[{str(i + 1).zfill(maxDigits)}]> {line.strip()}")
+                    continue
+
                 else:
                     lineNo += 1
                     toExec.append(line)
