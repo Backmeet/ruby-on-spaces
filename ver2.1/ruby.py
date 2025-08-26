@@ -399,6 +399,8 @@ def wrap_for_py(val):
 
 
 def unwrap_from_py(obj):
+    if isinstance(obj, Function):
+        return obj
     t = obj.get("type")
     v = obj.get("value", None)
     if t == "null":
@@ -810,27 +812,51 @@ if __name__ == "__main__":
                 except Exception as e:
                     files_dict[fname] = f"[Error reading file: {e}]"
         return files_dict
-        
+    
     if len(sys.argv) > 1:
         with open(sys.argv[1], "r", encoding="utf-8") as f:
             code = f.read()
-        if sys.argv[2] == "--libs" and os.path.exists(sys.argv[3]):
+        if len(sys.argv) == 4 and sys.argv[2] == "--libs" and os.path.exists(sys.argv[3]):
             run(code, make_global_env(read_files_recursive(sys.argv[3])))
         else:
             run(code)
     else:
-        lineNo = 0
+        print(f"ROS(Ruby On Spaces) ver:{ROS['ver']}")
+        print("Type 'RUN' to execute block, 'CLEAR' to clear block, 'SAVE <path>' to save block into a file, 'LOAD <path>' to load a file.")
+        lineNo = 1
         toExec = []
+        maxDigits = 4
         while True:
             try:
-                line = input(f"[{lineNo}]>>> ")
-                if line.strip() == "":
-                    continue
-                if line.strip().endswith("RUN"):
+                line = input(f"[{str(lineNo).zfill(maxDigits)}]> ")
+                striped = line.strip()
+                if striped.startswith("RUN"):
                     code = "\n".join(toExec)
                     run(code)
                     toExec = []
-                    lineNo = 0
+                    lineNo = 1
+                    continue
+
+                elif striped.startswith("CLEAR"):
+                    toExec = []
+                    lineNo = 1
+                    continue
+
+                elif striped.startswith("SAVE"):
+                    with open(line.split()[1], "w") as f:
+                        f.writelines(toExec)
+                    toExec = []
+                    lineNo = 1
+                    continue
+
+                elif striped.startswith("LOAD"):
+                    with open(striped[5:], "r") as f:
+                        toExec = f.readlines()
+                        lineNo = 1
+                        for i, line in enumerate(toExec):
+                            print(f"[{str(i + 1).zfill(maxDigits)}]> {line.strip()}")
+
+                    continue
                 else:
                     lineNo += 1
                     toExec.append(line)
