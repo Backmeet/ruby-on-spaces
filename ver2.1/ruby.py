@@ -1,4 +1,4 @@
-import re, types
+import re, types, time
 import sys, copy, os
 
 # ===== Lexer =====
@@ -697,6 +697,21 @@ def py_print(args_wrapped, env):
     print(*vals)
     return {"type":"null", "value": None}
 
+def py_input(args_wrapped, env):
+    vals = [unwrap_from_py(a) for a in args_wrapped]
+    return wrap_for_py(input(*vals))
+
+def py_delay(args_wrapped, env):
+    vals = [unwrap_from_py(a) for a in args_wrapped]
+    if len(vals) == 1:
+        if isinstance(vals[0], (float, int)):
+            time.sleep(vals[0])
+        else:
+            raise TypeError("delay only expects int or floats (sec) as delay value")
+    else:
+        raise TypeError("delay only expects one delay value")
+    return wrap_for_py(None)
+
 def py_len(args_wrapped, env):
     vals = [unwrap_from_py(a) for a in args_wrapped]
     if len(vals) != 1:
@@ -818,6 +833,7 @@ def py_cast(args_wrapped, env):
         return wrap_for_py(None)
 
 
+
 ROS = {
     "ver": "BETA (ver2)"
 }
@@ -840,7 +856,8 @@ def make_global_env(files):
     g.set_here("isType"       , Function("isType"       , ["value", "type"] , None, g, escapeToPython=True, pyfunc=py_isType      ))
     g.set_here("addPyFunction", Function("addPyFunction", []                , None, g, escapeToPython=True, pyfunc=register_pyfunc))
     g.set_here("addToEnv"     , Function("addToEnv"     , ["name", "value"] , None, g, escapeToPython=True, pyfunc=py_addToEnv    ))
-
+    g.set_here("input"        , Function("input"        , []                , None, g, escapeToPython=True, pyfunc=py_input       ))
+    g.set_here("delay"        , Function("delay"        , ["sec"]           , None, g, escapeToPython=True, pyfunc=py_delay       ))
 
     g.set_here("ROS"   , ROS)
     g.set_here("__importables__", files)
