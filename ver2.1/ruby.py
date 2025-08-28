@@ -900,7 +900,7 @@ if __name__ == "__main__":
             run(code)
     else:
         print(f"ROS(Ruby On Spaces) ver:{ROS['ver']}")
-        print("Type 'run' to execute block \n'clear' to clear block \n'save <path>' to save block into a file \n'load <path>' to load a file \n'last' to load the last ran block into the current block \n'cls' to clear the terminal.")
+        print("Type 'run' to execute block \n'clear' to clear block \n'save <path>' to save block into a file \n'load <path>' to load a file \n'last' to load the last ran block into the current block \n'cls' to clear the terminal \n'exit' to exit")
         lineNo = 1
         toExec = []
         lastRan = []
@@ -917,6 +917,9 @@ if __name__ == "__main__":
                     run(code)
                     continue
                 
+                elif striped.lower().startswith("exit"):
+                    quit()
+
                 elif striped.lower().startswith("cls"):
                     os.system("cls")
 
