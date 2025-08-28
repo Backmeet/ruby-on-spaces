@@ -136,6 +136,10 @@ class Parser:
             self.advance()
             fileName = self.parse_expression()
             return {"type":"import", "fileName":fileName}
+        if self.cur.text == "del":
+            self.advance()
+            expr = self.parse_expression()
+            return {"type":"del", "expr":expr}
         if self.cur.text == "for":
             return self.parse_for()
         # assignment or expr-stmt
@@ -437,6 +441,16 @@ class Env:
             self.map[name] = copy.deepcopy(value)
         else:
             scope.map[name] = copy.deepcopy(value)
+    def remove_here(self, name):
+        del self.map[name]
+    
+    def remove(self, name):
+        scope = self.resolve_Scope(name)
+        if scope is None:
+            del self.map[name]
+        else:
+            del scope.map[name]
+
     def resolve_scope(self, name):
         if name in self.map:
             return self
@@ -455,7 +469,7 @@ class Function:
     def __call__(self, argvals):
         if self.escapeToPython:
             wrapped_args = [wrap_for_py(v) for v in argvals]
-            res = self.pyfunc(wrapped_args)
+            res = self.pyfunc(wrapped_args, self.env)
             return unwrap_from_py(res)
         local = Env(self.env)
         for i, p in enumerate(self.params):
@@ -646,6 +660,12 @@ def exec_stmt(node, env):
         module = runEnv.get("module")
         env.set(fileName.split(".")[0], module)
         return
+    if t == "del":
+        expr = node["expr"]
+        if expr["type"] != "var":
+            raise SyntaxError(f"can only remove variables from run time not {expr['type']}")
+        env.remove(expr["name"])
+        return
 
     if t == "for_in":
         iterable = eval_expr(node["iter"], env)
@@ -672,25 +692,25 @@ def exec_block(stmts, env):
 
 # ===== Builtins and Python interop =====
 
-def py_print(args_wrapped):
+def py_print(args_wrapped, env):
     vals = [unwrap_from_py(a) for a in args_wrapped]
     print(*vals)
     return {"type":"null", "value": None}
 
-def py_len(args_wrapped):
+def py_len(args_wrapped, env):
     vals = [unwrap_from_py(a) for a in args_wrapped]
     if len(vals) != 1:
         raise TypeError("len expects 1 argument")
     return wrap_for_py(len(vals[0]))
 
-def py_range(args_wrapped):
+def py_range(args_wrapped, env):
     vals = [unwrap_from_py(a) for a in args_wrapped]
     if not (1 <= len(vals) <= 3):
         raise TypeError("range expects 1..3 args")
     r = range(*vals)
     return {"type":"list", "value":[wrap_for_py(int(x)) for x in r]}
 
-def py_upper(args_wrapped):
+def py_upper(args_wrapped, env):
     vals = [unwrap_from_py(a) for a in args_wrapped]
     if len(vals) != 1:
         raise TypeError("upper expects 1 argument")
@@ -698,7 +718,7 @@ def py_upper(args_wrapped):
         raise TypeError("can not upper a non string")
     return wrap_for_py(vals[0].upper())
 
-def py_lower(args_wrapped):
+def py_lower(args_wrapped, env):
     vals = [unwrap_from_py(a) for a in args_wrapped]
     if len(vals) != 1:
         raise TypeError("upper expects 1 argument")
@@ -706,7 +726,7 @@ def py_lower(args_wrapped):
         raise TypeError("can not lower a non string")
     return wrap_for_py(vals[0].lower())
 
-def py_split(args_wrapped):
+def py_split(args_wrapped, env):
     vals = [unwrap_from_py(a) for a in args_wrapped]
     if len(vals) != 2:
         raise TypeError("split expects 2 arguments")
@@ -719,7 +739,7 @@ def py_split(args_wrapped):
 py_globals = {}
 py_locals = py_globals  # both point to same dict
 
-def py_exec(args_wrapped):
+def py_exec(args_wrapped, env):
     vals = [unwrap_from_py(a) for a in args_wrapped]
     if len(vals) == 1:
         if isinstance(vals[0], str):
@@ -730,7 +750,7 @@ def py_exec(args_wrapped):
         exec("".join(vals), py_globals, py_locals)
     return {"type":"null", "value": None}
 
-def py_eval(args_wrapped):
+def py_eval(args_wrapped, env):
     vals = [unwrap_from_py(a) for a in args_wrapped]
     if len(vals) == 1:
         if isinstance(vals[0], str):
@@ -746,23 +766,36 @@ typesTable = {
     float: "number",
     str: "str",
     list: "list",
-    dict: "obj"
+    dict: "obj",
+    Function: "function"
 }
-def py_type(args_wrapped):
+def py_type(args_wrapped, env):
     vals = [unwrap_from_py(a) for a in args_wrapped]
     if len(vals) == 1:
         obj = vals[0]
         return wrap_for_py(typesTable.get(type(obj), "unknown"))
     raise TypeError("type expects 1 argument")
 
-def py_isType(args_wrapped):
+def py_isType(args_wrapped, env):
     vals = [unwrap_from_py(a) for a in args_wrapped]
     if len(vals) == 2:
         obj, type_name = vals
         return wrap_for_py(typesTable.get(type(obj), "unknown") == type_name)
     raise TypeError("isType expects 2 arguments")
 
-def py_cast(args_wrapped):
+def py_addToEnv(args_wrapped, env:Env):
+    vals = [unwrap_from_py(a) for a in args_wrapped]
+    if len(vals) == 2:
+        name, value = vals
+        if not isinstance(name, str):
+            raise TypeError("name must be a string")
+        
+        env.set(name, value)
+
+        return wrap_for_py(None)
+    raise TypeError("addToEnv expects 2 arguments")
+
+def py_cast(args_wrapped, env):
     vals = [unwrap_from_py(a) for a in args_wrapped]
     if len(vals) == 2:
 
@@ -782,33 +815,36 @@ def py_cast(args_wrapped):
                     raise TypeError(f"Unknown type: {vals[1]}")
         except Exception as e:
             raise TypeError(f"Failed to cast {vals[0]} to {vals[1]}: {e}")
-        return warp_for_py(None)
+        return wrap_for_py(None)
 
 
 ROS = {
     "ver": "BETA (ver2)"
 }
 
+def register_pyfunc(env, name, pyfunc):
+    env.set_here(name, Function(name, ["*args"], None, env, escapeToPython=True, pyfunc=pyfunc))
+
 def make_global_env(files):
     g = Env()
-    g.set_here("print" , Function("print" , ["*values"]       , None, g, escapeToPython=True, pyfunc=py_print ))
-    g.set_here("len"   , Function("len"   , ["x"]             , None, g, escapeToPython=True, pyfunc=py_len   ))
-    g.set_here("range" , Function("range" , ["a","b","c"]     , None, g, escapeToPython=True, pyfunc=py_range ))
-    g.set_here("upper" , Function("upper" , ["x"]             , None, g, escapeToPython=True, pyfunc=py_upper ))
-    g.set_here("lower" , Function("lower" , ["x"]             , None, g, escapeToPython=True, pyfunc=py_lower ))
-    g.set_here("split" , Function("split" , ["x", "sep"]      , None, g, escapeToPython=True, pyfunc=py_split ))
-    g.set_here("execPy", Function("execPy", ["code"]          , None, g, escapeToPython=True, pyfunc=py_exec  ))
-    g.set_here("evalPy", Function("evalPy", ["expression"]    , None, g, escapeToPython=True, pyfunc=py_eval  ))
-    g.set_here("cast"  , Function("cast"  , ["value", "type"] , None, g, escapeToPython=True, pyfunc=py_cast  ))
-    g.set_here("type"  , Function("type"  , ["value"]         , None, g, escapeToPython=True, pyfunc=py_type  ))
-    g.set_here("isType", Function("isType", ["value", "type"] , None, g, escapeToPython=True, pyfunc=py_isType))
+    g.set_here("print"        , Function("print"        , ["*values"]       , None, g, escapeToPython=True, pyfunc=py_print       ))
+    g.set_here("len"          , Function("len"          , ["x"]             , None, g, escapeToPython=True, pyfunc=py_len         ))
+    g.set_here("range"        , Function("range"        , ["a","b","c"]     , None, g, escapeToPython=True, pyfunc=py_range       ))
+    g.set_here("upper"        , Function("upper"        , ["x"]             , None, g, escapeToPython=True, pyfunc=py_upper       ))
+    g.set_here("lower"        , Function("lower"        , ["x"]             , None, g, escapeToPython=True, pyfunc=py_lower       ))
+    g.set_here("split"        , Function("split"        , ["x", "sep"]      , None, g, escapeToPython=True, pyfunc=py_split       ))
+    g.set_here("execPy"       , Function("execPy"       , ["code"]          , None, g, escapeToPython=True, pyfunc=py_exec        ))
+    g.set_here("evalPy"       , Function("evalPy"       , ["expression"]    , None, g, escapeToPython=True, pyfunc=py_eval        ))
+    g.set_here("cast"         , Function("cast"         , ["value", "type"] , None, g, escapeToPython=True, pyfunc=py_cast        ))
+    g.set_here("type"         , Function("type"         , ["value"]         , None, g, escapeToPython=True, pyfunc=py_type        ))
+    g.set_here("isType"       , Function("isType"       , ["value", "type"] , None, g, escapeToPython=True, pyfunc=py_isType      ))
+    g.set_here("addPyFunction", Function("addPyFunction", []                , None, g, escapeToPython=True, pyfunc=register_pyfunc))
+    g.set_here("addToEnv"     , Function("addToEnv"     , ["name", "value"] , None, g, escapeToPython=True, pyfunc=py_addToEnv    ))
+
 
     g.set_here("ROS"   , ROS)
     g.set_here("__importables__", files)
     return g
-
-def register_pyfunc(env, name, pyfunc):
-    env.set_here(name, Function(name, ["*args"], None, env, escapeToPython=True, pyfunc=pyfunc))
 
 # ===== Runner =====
 
@@ -847,7 +883,7 @@ if __name__ == "__main__":
             run(code)
     else:
         print(f"ROS(Ruby On Spaces) ver:{ROS['ver']}")
-        print("Type 'RUN' to execute block, 'CLEAR' to clear block, 'SAVE <path>' to save block into a file, 'LOAD <path>' to load a file.")
+        print("Type 'run' to execute block \n'clear' to clear block \n'save <path>' to save block into a file \n'load <path>' to load a file \n'last' to load the last ran block into the current block \n'cls' to clear the terminal.")
         lineNo = 1
         toExec = []
         lastRan = []
@@ -856,43 +892,49 @@ if __name__ == "__main__":
             try:
                 line = input(f"[{str(lineNo).zfill(maxDigits)}]> ")
                 striped = line.strip()
-                if striped.startswith("RUN"):
+                if striped.lower().startswith("run"):
                     code = "\n".join(toExec)
-                    run(code)
                     lastRan = toExec
                     toExec = []
                     lineNo = 1
+                    run(code)
                     continue
+                
+                elif striped.lower().startswith("cls"):
+                    os.system("cls")
 
-                elif striped.startswith("CLEAR"):
+                elif striped.lower().startswith("clear"):
                     toExec = []
                     lineNo = 1
                     continue
 
-                elif striped.startswith("SAVE"):
+                elif striped.lower().startswith("save"):
                     with open(line.split()[1], "w") as f:
                         f.writelines(toExec)
                     toExec = []
                     lineNo = 1
+                    print("---")
                     continue
 
-                elif striped.startswith("LOAD"):
+                elif striped.lower().startswith("load"):
                     with open(striped[5:], "r") as f:
                         toExec = f.readlines()
-                        lineNo = 1
+                        lineNo = len(toExec) + 1
                         for i, line in enumerate(toExec):
                             print(f"[{str(i + 1).zfill(maxDigits)}]> {line.strip()}")
-
                     continue
 
-                elif striped.startswith("LAST"):
+                elif striped.lower().startswith("last"):
+                    toExec = lastRan
                     for i, line in enumerate(lastRan):
                         print(f"[{str(i + 1).zfill(maxDigits)}]> {line.strip()}")
+                    i = len(toExec) + 1
                     continue
 
                 else:
-                    lineNo += 1
                     toExec.append(line)
+
+                lineNo += 1
 
             except EOFError:
                 break
