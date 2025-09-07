@@ -865,12 +865,84 @@ def make_global_env(files):
 
 # ===== Runner =====
 
-def run(src, env=None):
+import os
+from collections import namedtuple
+
+DirInfo = namedtuple("DirInfo", ["path", "files"])
+FileInfo = namedtuple("FileInfo", ["path", "contents"])
+
+def read_path(path, include_files=1, include_dirs=1, max_depth=1, flatten=0):
+    """
+    Recursively read files and/or directories from a path.
+
+    Args:
+        path (str): Base path to start reading from.
+        include_files (bool): Whether to include files in output.
+        include_dirs (bool): Whether to include directories in output.
+        max_depth (int): Maximum recursion depth (1 = only this folder).
+        flatten (bool): If True, return {file_path: contents} instead of nested structure.
+
+    Returns:
+        dict: Either nested {dirname: DirInfo(...)} or flat {filepath: contents}
+    """
+    result = {} if not flatten else {}
+
+    def _read(current_path, depth):
+        nonlocal result
+        if depth > max_depth:
+            return
+
+        try:
+            entries = os.listdir(current_path)
+        except PermissionError:
+            return
+
+        files = {}
+        for entry in entries:
+            entry_path = os.path.join(current_path, entry)
+
+            if os.path.isfile(entry_path) and include_files:
+                with open(entry_path, "r", encoding="utf-8", errors="ignore") as f:
+                    contents = f.read()
+                file_info = FileInfo(path=entry_path, contents=contents)
+
+                if flatten:
+                    result[entry_path] = contents
+                else:
+                    files[entry] = file_info
+
+            elif os.path.isdir(entry_path) and depth < max_depth:
+                if flatten:
+                    _read(entry_path, depth + 1)
+                else:
+                    sub_result = _read(entry_path, depth + 1)
+                    if include_dirs and sub_result is not None:
+                        result[entry] = sub_result
+
+        if not flatten and (include_dirs or include_files):
+            return DirInfo(path=current_path, files=files)
+
+    top_result = _read(path, 0)
+    if not flatten and include_dirs and top_result is not None:
+        result[os.path.basename(path)] = top_result
+
+    return result
+
+libs_root = "E:/vs code/files/ruby-on-spaces/code-examples/2.x/libs"
+
+files = read_path(libs_root, flatten=True)
+
+files = {
+    os.path.relpath(path, libs_root): text
+    for path, text in files.items()
+}
+
+def run(src, env=None, files=files):
     tokens = lex(src)
     parser = Parser(tokens)
     ast = parser.parse()
     if env is None:
-        env = make_global_env({})
+        env = make_global_env(files)
     exec_stmt(ast, env)
     return env
 
@@ -911,10 +983,10 @@ if __name__ == "__main__":
                 striped = line.strip()
                 if striped.lower().startswith("run"):
                     code = "\n".join(toExec)
+                    run(code)
                     lastRan = toExec
                     toExec = []
                     lineNo = 1
-                    run(code)
                     continue
                 
                 elif striped.lower().startswith("exit"):
