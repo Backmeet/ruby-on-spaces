@@ -854,8 +854,6 @@ def make_global_env(files):
     g.set_here("cast"         , Function("cast"         , ["value", "type"] , None, g, escapeToPython=True, pyfunc=py_cast        ))
     g.set_here("type"         , Function("type"         , ["value"]         , None, g, escapeToPython=True, pyfunc=py_type        ))
     g.set_here("isType"       , Function("isType"       , ["value", "type"] , None, g, escapeToPython=True, pyfunc=py_isType      ))
-    g.set_here("addPyFunction", Function("addPyFunction", []                , None, g, escapeToPython=True, pyfunc=register_pyfunc))
-    g.set_here("addToEnv"     , Function("addToEnv"     , ["name", "value"] , None, g, escapeToPython=True, pyfunc=py_addToEnv    ))
     g.set_here("input"        , Function("input"        , []                , None, g, escapeToPython=True, pyfunc=py_input       ))
     g.set_here("delay"        , Function("delay"        , ["sec"]           , None, g, escapeToPython=True, pyfunc=py_delay       ))
 

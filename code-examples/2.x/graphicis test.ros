@@ -1,0 +1,57 @@
+import "pygameUtils.ros"
+pygameUtils.init()
+
+execPy("_screen = pygame.display.set_mode((900, 600))")
+execPy("_clock = pygame.time.Clock()")
+running = 1
+yv = 10
+xv = 10
+x = 100
+y = 100
+
+colourInc = 25.5
+colour = [0, 0, 0]
+
+while (running)
+    execPy("_screen.fill((0, 0, 0))")
+    for event in pygameUtils.event.get()
+        if event.type == "Quit"
+            running = 0
+        end
+    end
+
+    execPy("pygame.draw.rect(_screen, " + cast(colour, "str") + ", (" + cast(x, "str") + ", " + cast(y, "str") + ", 50, 50))")
+    
+    colour[0] = colour[0] + colourInc
+
+    if (colour[0] >= 255)
+        colour[0] = 0
+        colour[1] = colour[1] + colourInc
+    end
+    if (colour[1] >= 255)
+        colour[1] = 0
+        colour[2] = colour[2] + colourInc
+    end
+    if (colour[2] >= 255)
+        colour[2] = 0
+    end
+
+    y = y + yv
+    x = x + xv
+
+    if (cast((y > 600), "int") + cast((y < 0), "int"))
+        yv = -yv
+    end
+    if (cast((x > 900), "int") + cast((x < 0), "int"))
+        xv = -xv
+    end
+    
+
+    execPy("pygame.display.update()")
+    execPy("_clock.tick(60)")
+end
+
+pygameUtils.stop()
+
+end
+

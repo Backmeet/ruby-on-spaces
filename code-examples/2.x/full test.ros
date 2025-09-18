@@ -1,0 +1,54 @@
+person = {}
+
+def person.new(self, name, age)
+	self.name = name
+	self.age = age
+	return self
+end
+
+def person.add(self, a, b)
+	print(cast(a, "str") + " + " + cast(b, "str") + " = " + cast(a + b, "str"))
+end
+
+allen = person.new("allen", 122)
+
+print(person)
+print(allen)
+person.add(10, 2)
+allen.add(10, 2)
+
+def fib(n)
+	a = 0
+	b = 1
+	for i in range(n)
+		c = a + b
+		a = b
+		print(b)
+		b = c
+	end
+	return b
+end
+
+fib(10)
+
+def concat(a, b)
+	return a + b
+end
+
+print(concat("Hello, ", "world"))
+
+print(10 / 2 + 3)
+
+z = ""
+for _ in ["H", "e", "l", "l", "o", ",", " ", "w", "o", "r", "l", "d"]
+	z = concat(z, _)
+end
+print(z)
+
+x = 0
+while (x != 10)
+	print(x)
+	x = x + 1
+end
+
+end

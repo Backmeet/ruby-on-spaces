@@ -1,0 +1,32 @@
+module = {}
+
+event = {}
+
+def event.get()
+    return evalPy("[{k: str(v) for k, v in e.dict.items()} | {'type': pygame.event.event_name(e.type)} for e in pygame.event.get()]")
+end
+
+def event.poll()
+    return evalPy("({k: str(v) for k, v in e.dict.items()} | {'type': pygame.event.event_name(e.type)}) if (e:=pygame.event.poll()) else None")
+end
+
+def event.wait()
+    return evalPy("{k: str(v) for k, v in e.dict.items()} | {'type': pygame.event.event_name(e.type)} if (e:=pygame.event.wait()) else None")
+end
+
+def event.clear()
+    execPy("pygame.event.clear()")
+end
+
+def module.init()
+    execPy("import pygame")
+    execPy("pygame.init()")
+end
+
+def module.stop()
+    execPy("pygame.quit()")
+end
+
+module.event = event
+
+end
