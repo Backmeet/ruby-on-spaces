@@ -172,8 +172,6 @@ async function loadPyodideAndROS(){
     return line;
   }).join("\n");
 
-  console.clear()
-  console.log(rubyContent)
   pyodide.FS.writeFile("ruby.py", rubyContent);
 
   // Patch input() to use terminal
@@ -182,11 +180,18 @@ import builtins
 import asyncio
 from js import promptInput, appendTerminal
 
+# Override input()
 def input(prompt=None):
-    if prompt: appendTerminal(str(prompt))
+    if prompt:
+        appendTerminal(str(prompt))
     return asyncio.get_event_loop().run_until_complete(promptInput())
 
+# Override print()
+def print(*args, sep=' ', end='\\n'):
+    appendTerminal(sep.join(str(a) for a in args) + end)
+
 builtins.input = input
+builtins.print = print
 `);
 
   appendTerminal(`ROS v${latestVer} loaded.\n`);
