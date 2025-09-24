@@ -1,0 +1,142 @@
+<script>
+const editor = CodeMirror(document.getElementById("editor"), { mode:"ruby", lineNumbers:true, theme:"material" });
+const tabs = document.getElementById("tabs");
+const addTabBtn = document.getElementById("addTab");
+const runButton = document.getElementById("runButton");
+const output = document.getElementById("output");
+
+let files = {}, activeFile = null;
+
+function sanitizeFilename(name){return name.endsWith(".ru")?name:name+".ru";}
+function createFile(name=null, content=""){
+  name = sanitizeFilename(name || `file${Object.keys(files).length + 1}.ru`);
+  if(files[name]){alert("File already exists!"); return;}
+  files[name]=content;
+  const tab=document.createElement("div"); tab.className="tab"; tab.textContent=name;
+  const close=document.createElement("span"); close.textContent="×"; close.className="close";
+  close.onclick=e=>{e.stopPropagation(); delete files[name]; tabs.removeChild(tab); if(activeFile===name){const next=Object.keys(files)[0]; if(next)switchToFile(next); else{activeFile=null; editor.setValue("");}}};
+  tab.appendChild(close); tab.onclick=()=>switchToFile(name);
+  tabs.insertBefore(tab, addTabBtn); switchToFile(name);
+}
+function switchToFile(name){
+  if(activeFile) files[activeFile]=editor.getValue();
+  activeFile=name; editor.setValue(files[name]||"");
+  Array.from(tabs.children).forEach(tab=>tab.classList.toggle("active", tab.textContent.startsWith(name)));
+}
+addTabBtn.onclick=()=>{const name=prompt("Enter new file name (will be saved as .ru):"); if(name) createFile(name);}
+createFile("main.ru");
+
+// --- Terminal logic ---
+let waitingForInput=false, resolveInput=null;
+let promptText="> ";
+let inputStart=0;
+
+function appendTerminal(text){
+  output.textContent+=text;
+  output.scrollTop=output.scrollHeight;
+}
+
+async function promptInput(){
+  appendTerminal(promptText);
+  output.contentEditable=true;
+  waitingForInput=true;
+  const range=document.createRange();
+  const sel=window.getSelection();
+  range.setStart(output.childNodes[0] || output, output.textContent.length);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  inputStart=output.textContent.length;
+  return new Promise(res=>{resolveInput=res;});
+}
+
+output.addEventListener("keydown", e=>{
+  if(waitingForInput){
+    const cursorPos=window.getSelection().focusOffset;
+
+    if(e.key.length===1 && !e.ctrlKey && !e.metaKey) return;
+
+    if(e.key==="Enter"){
+      e.preventDefault();
+      const userInput=output.textContent.slice(inputStart);
+      appendTerminal("\n");
+      waitingForInput=false;
+      output.contentEditable=false;
+      resolveInput(userInput);
+      return;
+    }
+
+    if(e.key==="Backspace"){
+      if(cursorPos<=inputStart){
+        e.preventDefault();
+        return;
+      }
+    }
+
+    if(e.ctrlKey && e.key==="c"){
+      e.preventDefault();
+      appendTerminal("^C\n");
+      waitingForInput=false;
+      output.contentEditable=false;
+      resolveInput(null);
+      return;
+    }
+  } else e.preventDefault();
+});
+
+// --- Pyodide + ROS loader ---
+let pyodideReady, pyodide;
+async function loadPyodideAndROS(){
+  pyodide = await loadPyodide({stdout:console.log, stderr:console.error});
+  appendTerminal("Pyodide loaded.\n");
+  const repo="https://api.github.com/repos/Backmeet/ruby-on-spaces/contents/";
+  const res = await fetch(repo);
+  const data = await res.json();
+  const verDirs = data.filter(f=>f.type==="dir" && f.name.startsWith("ver")).map(f=>f.name);
+  const latestVer = verDirs.map(v=>parseInt(v.slice(3))).sort((a,b)=>b-a)[0];
+  const verName = "ver"+latestVer;
+  const verRes = await fetch(repo+verName);
+  const verData = await verRes.json();
+  const rubyFile = verData.find(f=>f.name==="ruby.py");
+  const rubyContent = await fetch(rubyFile.download_url).then(r=>r.text());
+  pyodide.FS.writeFile("ruby.py", rubyContent);
+
+  // Patch input() to use terminal
+  await pyodide.runPythonAsync(`
+import builtins
+import asyncio
+from js import promptInput
+
+def input(prompt=None):
+    if prompt: from js import appendTerminal; appendTerminal(str(prompt))
+    return asyncio.get_event_loop().run_until_complete(promptInput())
+builtins.input = input
+`);
+
+  appendTerminal(`ROS v${latestVer} loaded.\n`);
+}
+pyodideReady=loadPyodideAndROS();
+
+// --- Run code ---
+runButton.onclick=async()=>{
+  if(!activeFile) return; files[activeFile]=editor.getValue();
+  await pyodideReady;
+  const sources={};
+  for(const [name, content] of Object.entries(files)){if(name!==activeFile)sources[name]=content;}
+  const code = files[activeFile];
+  const sourcesDict = JSON.stringify(sources);
+  const fullCode = `
+from ruby import make_global_env, run
+env = make_global_env(${sourcesDict})
+run("""${code.replace(/\\/g,"\\\\").replace(/"""/g,'\\"""')}""", env)
+`;
+  appendTerminal("\nRunning...\n");
+  try{await pyodide.runPythonAsync(fullCode);}catch(e){appendTerminal("\nError: "+e+"\n");}
+};
+
+// --- Resizable dragbar ---
+const dragbar=document.getElementById("dragbar"); const outputPanel=document.getElementById("outputPanel"); let dragging=false;
+dragbar.addEventListener("mousedown",()=>{dragging=true; document.body.style.cursor="col-resize";});
+document.addEventListener("mouseup",()=>{dragging=false; document.body.style.cursor="default";});
+document.addEventListener("mousemove",e=>{if(!dragging) return; const percent=(window.innerWidth-e.clientX)/window.innerWidth; outputPanel.style.width=`${Math.max(20, percent*100)}%`;});
+</script>
