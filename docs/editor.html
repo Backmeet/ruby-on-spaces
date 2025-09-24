@@ -1,3 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>ROS Editor</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.10/theme/material.min.css" />
+<style>
+* { box-sizing: border-box; }
+body { margin:0; font-family: monospace; background:#6e9acb; overflow:hidden; height:100vh; }
+#container { display:flex; height:100vh; width:100vw; }
+#leftBar { display:flex; flex-direction:column; width:60px; background:#ccc; align-items:center; justify-content:flex-start; padding:5px; }
+#runButton { width:50px; height:50px; background:#0f0; border:2px solid #000; margin-bottom:10px; font-weight:bold; }
+#editorWrapper { flex-grow:1; display:flex; flex-direction:column; background:#bbb; height:100%; }
+#tabs { display:flex; height:35px; background:#bbb; border-bottom:2px solid black; align-items:center; }
+.tab { background:#888; padding:5px 10px; margin-right:5px; border:2px solid black; border-bottom:none; cursor:pointer; display:flex; align-items:center; }
+.tab.active { background:#ccc; }
+.tab .close { margin-left:8px; color:red; cursor:pointer; }
+#addTab { font-size:20px; font-weight:bold; margin-left:auto; margin-right:10px; padding:0 10px; cursor:pointer; background:#ccc; border:2px solid black; }
+#editor { flex-grow:1; height:100%; }
+.CodeMirror { height:100% !important; }
+#outputPanel { width:30%; min-width:200px; background:#bbb; display:flex; flex-direction:column; border-left:2px solid black; }
+#outputTitle { text-align:center; font-weight:bold; border-bottom:2px solid black; background:#ccc; padding:5px; }
+#output { padding:10px; overflow-y:auto; white-space:pre-wrap; flex-grow:1; background:#000; color:#0f0; font-family:monospace; }
+#dragbar { width:5px; cursor:col-resize; background:#222; }
+</style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.10/codemirror.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.10/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.10/mode/ruby/ruby.min.js"></script>
+<script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+</head>
+<body>
+<div id="container">
+<div id="leftBar">
+<button id="runButton">RUN</button>
+</div>
+<div id="editorWrapper">
+<div id="tabs"><div id="addTab">+</div></div>
+<div id="editor"></div>
+</div>
+<div id="dragbar"></div>
+<div id="outputPanel">
+<div id="outputTitle">TERMINAL</div>
+<div id="output" contenteditable="false"></div>
+</div>
+</div>
+
 <script>
 const editor = CodeMirror(document.getElementById("editor"), { mode:"ruby", lineNumbers:true, theme:"material" });
 const tabs = document.getElementById("tabs");
@@ -140,3 +186,5 @@ dragbar.addEventListener("mousedown",()=>{dragging=true; document.body.style.cur
 document.addEventListener("mouseup",()=>{dragging=false; document.body.style.cursor="default";});
 document.addEventListener("mousemove",e=>{if(!dragging) return; const percent=(window.innerWidth-e.clientX)/window.innerWidth; outputPanel.style.width=`${Math.max(20, percent*100)}%`;});
 </script>
+</body>
+</html>
