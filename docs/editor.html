@@ -135,27 +135,57 @@ let pyodideReady, pyodide;
 async function loadPyodideAndROS(){
   pyodide = await loadPyodide({stdout:console.log, stderr:console.error});
   appendTerminal("Pyodide loaded.\n");
+
+  // --- Load latest ROS version from GitHub ---
   const repo="https://api.github.com/repos/Backmeet/ruby-on-spaces/contents/";
   const res = await fetch(repo);
   const data = await res.json();
   const verDirs = data.filter(f=>f.type==="dir" && f.name.startsWith("ver")).map(f=>f.name);
-  const latestVer = verDirs.map(v=>parseInt(v.slice(3))).sort((a,b)=>b-a)[0];
+
+  // Proper version sort (handles decimals like 2.1, 2.10)
+  const latestVer = verDirs
+    .map(v => v.slice(3))
+    .sort((a,b) => {
+      const aParts = a.split('.').map(Number);
+      const bParts = b.split('.').map(Number);
+      for(let i=0;i<Math.max(aParts.length,bParts.length);i++){
+        const aNum=aParts[i]||0, bNum=bParts[i]||0;
+        if(aNum!==bNum) return bNum-aNum;
+      }
+      return 0;
+    })[0];
+
   const verName = "ver"+latestVer;
   const verRes = await fetch(repo+verName);
   const verData = await verRes.json();
   const rubyFile = verData.find(f=>f.name==="ruby.py");
-  const rubyContent = await fetch(rubyFile.download_url).then(r=>r.text());
+  let rubyContent = await fetch(rubyFile.download_url).then(r=>r.text());
+
+  // --- Patch the problematic f-string line ---
+  rubyContent = rubyContent.split("\n").map(line=>{
+    if(line.includes('raise NameError(f"Undefined variable')) {
+      return `
+        context_str = ''.join(f'\\n{x}: {y}' for x, y in self.map.items())
+        raise NameError(f"Undefined variable {name} in context {context_str}")
+      `;
+    }
+    return line;
+  }).join("\n");
+
+  console.clear()
+  console.log(rubyContent)
   pyodide.FS.writeFile("ruby.py", rubyContent);
 
   // Patch input() to use terminal
   await pyodide.runPythonAsync(`
 import builtins
 import asyncio
-from js import promptInput
+from js import promptInput, appendTerminal
 
 def input(prompt=None):
-    if prompt: from js import appendTerminal; appendTerminal(str(prompt))
+    if prompt: appendTerminal(str(prompt))
     return asyncio.get_event_loop().run_until_complete(promptInput())
+
 builtins.input = input
 `);
 
@@ -186,5 +216,6 @@ dragbar.addEventListener("mousedown",()=>{dragging=true; document.body.style.cur
 document.addEventListener("mouseup",()=>{dragging=false; document.body.style.cursor="default";});
 document.addEventListener("mousemove",e=>{if(!dragging) return; const percent=(window.innerWidth-e.clientX)/window.innerWidth; outputPanel.style.width=`${Math.max(20, percent*100)}%`;});
 </script>
+
 </body>
 </html>

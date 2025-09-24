@@ -928,12 +928,15 @@ def read_path(path, include_files=1, include_dirs=1, max_depth=1, flatten=0):
 
 libs_root = "E:/vs code/files/ruby-on-spaces/code-examples/2.x/libs"
 
-files = read_path(libs_root, flatten=True)
+if os.path.exists(libs_root):
+    files = read_path(libs_root, flatten=True)
 
-files = {
-    os.path.relpath(path, libs_root): text
-    for path, text in files.items()
-}
+    files = {
+        os.path.relpath(path, libs_root): text
+        for path, text in files.items()
+    }
+else:
+    files = {}
 
 def run(src, env=None, files=files):
     tokens = lex(src)
