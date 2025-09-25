@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Ruby on Spaces Documentation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: monospace, monospace;
+      background: #111;
+      color: #eee;
+      margin: 0;
+      padding: 2rem;
+      line-height: 1.6;
+    }
+    h1, h2, h3 {
+      color: #ff6584;
+      margin-top: 2rem;
+    }
+    a {
+      color: #66ccff;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    pre {
+      background: #222;
+      padding: 1rem;
+      border-radius: 6px;
+      overflow-x: auto;
+    }
+    code {
+      color: #ffd580;
+    }
+    .container {
+      max-width: 950px;
+      margin: auto;
+    }
+    .nav {
+      margin-bottom: 2rem;
+    }
+    .nav a {
+      margin-right: 1rem;
+      font-weight: bold;
+    }
+    hr {
+      border: 0;
+      border-top: 1px solid #333;
+      margin: 2rem 0;
+    }
+    ul {
+      margin-left: 1.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Ruby on Spaces</h1>
+    <p><strong>Ruby on Spaces</strong> is a small experimental programming language built entirely in Python (with a Luau port for ver 2.1).  
+    It’s designed as a learning project in <strong>language design, parsing, and interpreter building</strong>, while still being usable for toy projects, scripting, or experimentation.</p>
+
+    <p>This language is <strong>minimal, hackable, and deliberately verbose</strong>.  
+    It’s not about performance — it’s about showing how a working interpreter can be constructed, extended, and modified.</p>
+
+    <p>If you are just here for the install go to <a href="install.html">Install page</a></p>
+
+    <div class="nav">
+      <a href="editor.html">▶ Online Editor</a>
+      <a href="https://github.com/Backmeet/ruby-on-spaces">GitHub Repo</a>
+    </div>
+
+    <hr>
+
+    <h2>Overview</h2>
+    <ul>
+      <li><strong>Implemented in</strong>: Pure Python (and the luau port).</li>
+      <li><strong>Execution model</strong>: Lex → Parse (Pratt parser) → AST → Tree-walking interpreter.</li>
+      <li><strong>Syntax style</strong>: Ruby-like with <code>def</code>, <code>end</code>, <code>while</code>, <code>if</code>, but Python-like in strictness.</li>
+      <li><strong>Core philosophy</strong>: Easy to extend — you can add new syntax, keywords, or built-ins by editing one file.</li>
+    </ul>
+
+    <hr>
+
+    <h2>Core Features</h2>
+    <ul>
+      <li><strong>Data types</strong>
+        <ul>
+          <li><code>number</code> → integers and floats</li>
+          <li><code>string</code> → double quoted, supports escape sequences</li>
+          <li><code>bool</code> → <code>true</code>, <code>false</code></li>
+          <li><code>null</code> → <code>null</code></li>
+          <li><code>list</code> → <code>[1, 2, 3]</code></li>
+          <li><code>dict</code> → <code>{ key: value, "literal": 123 }</code></li>
+        </ul>
+      </li>
+      <li><strong>Variables</strong>: Dynamic, mutable, global by default, assigned with <code>=</code></li>
+      <li><strong>Operators</strong>: Arithmetic, comparisons, unary, indexing, property sugar</li>
+      <li><strong>Control flow</strong>: <code>if</code>, <code>while</code>, <code>for-in</code>, <code>for-c</code></li>
+      <li><strong>Functions</strong>: <code>def</code>, <code>return</code>, methods on objects</li>
+      <li><strong>Built-ins</strong>: <code>print</code>, <code>len</code>, <code>range</code></li>
+      <li><strong>Interop with Python</strong>: register Python functions as builtins</li>
+    </ul>
+
+    <hr>
+
+    <h2>Example Programs</h2>
+    <pre><code># Variables and math
+x = 10
+y = 20
+z = x + y
+print("Sum:", z)
+
+# Conditionals
+if (x < y)
+    print("x is less than y")
+end
+
+# While loop
+while (x &lt; 15)
+    print("x =", x)
+    x = x + 1
+end
+
+# For-in loop
+for item in [1, 2, 3]
+    print("Item:", item)
+end
+
+# C-style for loop
+for (i = 0; i &lt; 3; i = i + 1)
+    print("i:", i)
+end
+
+# Functions
+def greet(name)
+    print("Hello,", name)
+end
+greet("World")
+
+# Methods on objects
+person = {}
+def person.new(self, name)
+    self.name = name
+end
+def person.greet(self)
+    print("Hi, I'm", self.name)
+end
+allen = person
+allen.new("allen")
+allen.greet()</code></pre>
+
+    <hr>
+
+    <h2>Syntax Reference</h2>
+    <ul>
+      <li><strong>Statements</strong>: expr, assign, def, methoddef, return, control</li>
+      <li><strong>Expressions</strong>: literals, lists, dicts, calls, indexing, property</li>
+    </ul>
+
+    <hr>
+
+    <h2>Runtime Model</h2>
+    <ul>
+      <li>Each function call creates a new <code>Env</code> (lexical scope).</li>
+      <li>Functions represented by <code>Function</code> class, support interop.</li>
+      <li>Return implemented via <code>ReturnSignal</code> exceptions.</li>
+      <li>Truthiness: only <code>false</code> and <code>null</code> are falsy.</li>
+    </ul>
+
+    <hr>
+
+    <h2>Extending the Language</h2>
+    <h3>Adding a builtin (Python)</h3>
+    <pre><code>def py_upper(args_wrapped):
+    s = unwrap_from_py(args_wrapped[0])
+    return wrap_for_py(s.upper())
+
+env = make_global_env()
+register_pyfunc(env, "upper", py_upper)
+run('''
+print(upper("hello, world"))
+end
+''')</code></pre>
+
+    <h3>Adding a builtin (Luau)</h3>
+    <pre><code>local ROSL = require(...)
+local function concat(args)
+  local vals = ROSL.unwrapArgs(args)
+  return ROSL.wrap(vals[1]..vals[2])
+end
+local env = ROSL.BasicEnv()
+ROSL.registorFunc(env, "concat", concat)
+ROSL.run([[
+  print(concat("Hello, ", "World"))
+  end
+]], env)</code></pre>
+
+    <h3>Adding keywords/syntax</h3>
+    <p>Edit <code>KEYWORDS</code>, parser methods, runtime eval.</p>
+
+    <h3>Adding operators</h3>
+    <p>Change precedence in <code>Parser.lbp</code>, parsing in <code>led</code>, runtime eval.</p>
+
+    <hr>
+
+    <h2>Running</h2>
+    <pre><code># Run a file
+python ruby.py program.rbs
+
+# REPL
+python ruby.py
+&gt;&gt;&gt; x = 5
+&gt;&gt;&gt; def sq(n) return n*n end
+&gt;&gt;&gt; print(sq(x))</code></pre>
+
+    <hr>
+
+    <h2>Grammar</h2>
+    <pre><code>program        ::= block EOF
+block          ::= { stmt (NL | ";")* } [ "end" ]
+stmt           ::= exprstmt | assign | defstmt | methoddef | returnstmt
+                 | ifstmt | whilestmt | forstmt
+exprstmt       ::= expression
+assign         ::= lvalue "=" expression
+defstmt        ::= "def" ID "(" [paramlist] ")" block "end"
+methoddef      ::= "def" ID "." ID "(" [paramlist] ")" block "end"
+returnstmt     ::= "return" expression
+ifstmt         ::= "if" expression block "end"
+whilestmt      ::= "while" "(" expression ")" block "end"
+forstmt        ::= "for" "(" stmt ";" expression ";" stmt ")" block "end"
+                 | "for" ID "in" expression block "end"
+paramlist      ::= ID { "," ID }
+expression     ::= primary { infixop expression }
+primary        ::= NUMBER | STRING | "true" | "false" | "null" | ID
+                 | "(" expression ")" | listliteral | dictliteral
+                 | "-" expression | "+" expression
+listliteral    ::= "[" [ expression { "," expression } ] "]"
+dictliteral    ::= "{" [ dictentry { "," dictentry } ] "}"
+dictentry      ::= (STRING | ID) ":" expression
+infixop        ::= "+" | "-" | "*" | "/" | "&lt;" | "&gt;" | "&lt;=" | "&gt;="
+                 | "==" | "!=" | "." | "[" expression "]" | call
+call           ::= "(" [ expression { "," expression } ] ")"
+lvalue         ::= ID | prop | index
+prop           ::= expression "." ID
+index          ::= expression "[" expression "]"</code></pre>
+
+    <hr>
+    <p>See the <a href="https://github.com/Backmeet/ruby-on-spaces">GitHub README</a> for source and updates.</p>
+  </div>
+</body>
+</html>

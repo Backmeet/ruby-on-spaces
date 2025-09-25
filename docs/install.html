@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Ruby on Spaces Documentation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: monospace, monospace;
+      background: #111;
+      color: #eee;
+      margin: 0;
+      padding: 2rem;
+      line-height: 1.6;
+    }
+    h1, h2, h3 {
+      color: #ff6584;
+      margin-top: 2rem;
+    }
+    a {
+      color: #66ccff;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    pre {
+      background: #222;
+      padding: 1rem;
+      border-radius: 6px;
+      overflow-x: auto;
+    }
+    code {
+      color: #ffd580;
+    }
+    .container {
+      max-width: 950px;
+      margin: auto;
+    }
+    .nav {
+      margin-bottom: 2rem;
+    }
+    .nav a {
+      margin-right: 1rem;
+      font-weight: bold;
+    }
+    hr {
+      border: 0;
+      border-top: 1px solid #333;
+      margin: 2rem 0;
+    }
+    ul {
+      margin-left: 1.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Ruby on Spaces</h1>
+
+    <div class="nav">
+      <a href="editor.html">▶ Online Editor</a>
+      <a href="https://github.com/Backmeet/ruby-on-spaces">GitHub Repo</a>
+    </div>
+
+    <hr>
+
+    <h2>For people new to Git</h2>
+
+    <p>First go to the <a herf="https://github.com/Backmeet/ruby-on-spaces">GitHub Repo</a> then open the latest version 
+    During the time writeing this it is <b>ver2.1</b>, after this download all of the sub files ending in .py after this 
+    make a new folder name it what every you please and put it in a convenient location. Now open your file manager and move 
+    the downloaded files into the new folder, this folder is were your ROS interpreter will lie. Now you are done! double click
+    on the file <code>ruby.py</code> which would open a REPL. if you want to run a file with libs attatched find the path to 
+    <code>ruby.pu</code>, your main <code>.ru</code> file and the folder to all the libs you want to import then run a cmd in 
+    powershell like this. <br> <br>
+    <code>py [path to intepreter] [path to main file] --lib [path to the folder of all the libs]</code>
+    
+    </p>
+
+
+    <hr>
+
+    <h2>For people who know git and have git bash installed</h2>
+    <p>First open your workspace and open a new terminal in your workspace, then run the cmd <br> <code>git clone https://github.com/Backmeet/ruby-on-spaces</code>
+    and you are done! to run code goto <code>$workspace path$/ruby-on-spaces/ver2.1</code> then run the file <code>ruby.py</code>
+    this will open a REPL, to run a file with libs do <br><code>py [$workspace path$/ruby-on-spaces/ver2.1/ruby.py] [path to the file to run] --libs [path to folder of all your libs]</code>       
+    </p>
+
+
+
+</body>
+</html>
