@@ -445,7 +445,7 @@ class Env:
         del self.map[name]
     
     def remove(self, name):
-        scope = self.resolve_Scope(name)
+        scope = self.resolve_scope(name)
         if scope is None:
             del self.map[name]
         else:
