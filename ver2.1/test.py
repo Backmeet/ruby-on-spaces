@@ -1,5 +1,22 @@
 import ruby
 
+ruby.run(ruby.Parser(ruby.lex('''
+def fib(n)
+    a = 0
+    b = 1
+    for (_ = 0; _ != n; _ = _ + 1)
+        c = a + b
+        a = b
+        b = c
+        print(b)
+    end
+end
+''')).parse(), ruby.make_global_env())
+
+
+
+
+"""
 env = ruby.make_global_env({
         "test": '''
 module = {}
@@ -18,3 +35,4 @@ ruby.run(
     end
     ''', env
 )
+"""

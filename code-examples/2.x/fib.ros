@@ -1,0 +1,13 @@
+def fib(n)
+	a = 0
+	b = 1
+	for (_ = 0; _ != n; _ = _ + 1)
+		c = a + b
+		a = b
+		print(b)
+		b = c
+	end
+	return b
+end
+fib(100)
+end

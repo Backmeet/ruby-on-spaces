@@ -192,7 +192,6 @@ class Parser:
             self.expect(")")
             self.skip_semi_nl()
             body = self.parse_block_until_end(terminators=("end",))
-            self.expect("end")
             return {"type":"for_c", "init": init, "cond": cond, "step": step, "body": body}
         else:
             var = self.expect("ID").text
@@ -201,11 +200,6 @@ class Parser:
             self.skip_semi_nl()
             body = self.parse_block_until_end(terminators=("end",))
             return {"type":"for_in", "var": var, "iter": iterable, "body": body}
-
-    def parse_lvalue_or_expr(self):
-        expr = self.parse_expression()
-        # If expression is a valid lvalue head, convert to lvalue structure
-        return expr
 
     # Pratt parser with postfix (call, index, dot) and infix operators
     def parse_expression(self, rbp=0):
@@ -983,13 +977,25 @@ if __name__ == "__main__":
                 line = input(f"[{str(lineNo).zfill(maxDigits)}]> ")
                 striped = line.strip()
                 if striped.lower().startswith("run"):
-                    code = "\n".join(toExec)
-                    run(code)
-                    lastRan = toExec
-                    toExec = []
-                    lineNo = 1
-                    continue
-                
+                    arg1 = striped[4:]
+                    if arg1 == "time":
+                        code = "\n".join(toExec)
+                        start = time.time()
+                        run(code)
+                        end = time.time()
+                        print(f"---\nTime taken: {end - start} sec")
+                        lastRan = toExec
+                        toExec = []
+                        lineNo = 1
+                        continue
+                    else:
+                        code = "\n".join(toExec)
+                        run(code)
+                        lastRan = toExec
+                        toExec = []
+                        lineNo = 1
+                        continue
+                    
                 elif striped.lower().startswith("exit"):
                     quit()
 
