@@ -968,6 +968,27 @@ void exec_stmt(Node& node, Env* env) {
         }
         return;
     }
+    if (t == "import") {
+        std::string fileName = this->eval_expr(std::any_cast<Node>(node.data["fileName"]), env);
+        std::unordered_map<std::string, std::string> files = std::any_cast<auto>(env.get("__importables__"));
+        if (files.count(fileName) < 0) {
+            throw std::runtime_error("Module '" + fileName + "' does not exist in current env");
+        }
+        Env runEnv run(files[fileName], basicEnv(files))
+        Node lib = std::any_cast<Node>(runEnv.get("module"))
+        size_t pos = s.rfind('.');  // find last '.'
+        std::string lastPart;
+
+        if (pos != std::string::npos) {
+            lastPart = s.substr(pos + 1);  // get substring after last '.'
+        } else {
+            lastPart = s;  // no '.' found, take whole string
+        }
+        
+        env.set(lastPart, lib);
+
+    }
+
     if (t == "block") {
         exec_block(std::any_cast<Nodes>(node.data["stmts"]), env);
         return;
@@ -1021,14 +1042,27 @@ Node cpp_print(Nodes args, Env* env) {
     return PREBUILTS.at(("null"));
 }
 
-Env basicEnv() {
+Env basicEnv(std::unordered_map<std::string, std::string> files) {
     Env env;
+
+    const std::unordered_map<std::string, std::string> ROS = {{"ver", "BETA (ver2.1) c++"}}
+
     Function Print = Function("print", {}, {}, nullptr);
     Print.escapeToCpp = true;
     Print.cppfunc = cpp_print;
 
     env.set("print", Node("function", JsonLike{{"value", Print}}));
+    env.set("__importables__", Node("dict", JsonLike{{"items", files}}));
+    env.set("ROS", Node("dict", JsonLike{{"items", ROS}}))
     return env;
+}
+
+Env run(std::string code, Env env = basicEnv({})) {
+    Tokens tokens = lex(code);
+    Parcer p = Parcer(tokens);
+    Node ast = p.parse();
+    exec_stmt(ast, env);
+    return Env
 }
 
 
@@ -1049,21 +1083,9 @@ end
 fib(100)
 
 end)";
-    Tokens tokens = lex(code);
-    Parcer p = Parcer(tokens);
-    std::cout << "TOKENS:\n" << std::endl;
-    for (Token t : tokens) {
-        std::cout << t.repr() << std::endl;
-    }
-
-    Node parsed = p.parse();
-
-    std::cout << "\n" << "NODES" << "\n" << parsed.repr() << std::endl;
-
-    Env env = basicEnv();
 
     auto start = std::chrono::high_resolution_clock::now();
-    exec_block(std::any_cast<Nodes>(parsed.data.at("stmts")), &env);
+    run(code);
     auto end = std::chrono::high_resolution_clock::now();
 
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
