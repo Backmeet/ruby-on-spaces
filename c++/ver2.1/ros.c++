@@ -986,7 +986,6 @@ void exec_stmt(Node& node, Env* env) {
         }
         
         env.set(lastPart, lib);
-
     }
 
     if (t == "block") {
