@@ -2,7 +2,6 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include <map>
 #include <format>
 #include <array>
 #include <set>
@@ -14,6 +13,29 @@
 #include <any>
 #include <variant>
 #include <chrono>
+#include <filesystem>
+#include <fstream>
+
+namespace filesys = std::filesystem;
+std::string read(filesys::path path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) throw std::runtime_error("Failed to open file for reading: " + path.string());
+    return std::string((std::istreambuf_iterator<char>(in)),
+                       std::istreambuf_iterator<char>());
+}
+
+void write(filesys::path path, const std::string& text) {
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    if (!out) throw std::runtime_error("Failed to open file for writing: " + path.string());
+    out.write(text.data(), text.size());
+}
+
+void append(filesys::path path, const std::string& text) {
+    std::ofstream out(path, std::ios::binary | std::ios::app);
+    if (!out) throw std::runtime_error("Failed to open file for appending: " + path.string());
+    out.write(text.data(), text.size());
+}
+
 
 typedef std::vector<std::string> Strings;
 typedef Strings Kinds;
@@ -457,7 +479,7 @@ struct Parcer {
                 return Node("number", JsonLike{{"value", std::stoi(t.text)}});
             } 
         } if (t.kind == "STRING") {
-            std::string s = decode_escaped(t.text.substr(1, t.text.length() - 1));
+            std::string s = decode_escaped(t.text.substr(1, t.text.length() - 2)); // duck this line as it was the sole issue for a very annoying bug
             return Node("string", JsonLike{{"value", s}});
         } if (t.kind =="ID") {
             if (t.text == "true") {
@@ -556,8 +578,8 @@ struct Function; // forward declaration
 
 class ReturnSignal : public std::runtime_error {
     public:
-    int value = 0;
-    ReturnSignal(int value) : std::runtime_error("ReturnSignal"), value(value) {}
+    Node value;
+    ReturnSignal(Node value) : std::runtime_error("ReturnSignal"), value(value) {}
 };
 
 template<typename T>
@@ -678,7 +700,7 @@ struct Function {
         try {
             exec_block(body, &local);
         } catch (ReturnSignal& rs) {
-            return Node("number", JsonLike{{"value", rs.value}});
+            return rs.value;
         }
         return Node("null", JsonLike{});
     }
@@ -755,6 +777,8 @@ std::pair<std::function<Node()>, std::function<void(Node)>> as_lvalue(Node& node
 }
 
 Node eval_expr(const Node& node, Env* env); // forward
+Env basicEnv(std::unordered_map<std::string, std::string> files = {});
+Env run(std::string code, Env env);
 
 Node get_prop(Node& obj, const std::string& name) {
     if (obj.type != "dict") throw std::runtime_error("Property access expects a dict");
@@ -916,7 +940,7 @@ void exec_stmt(Node& node, Env* env) {
     }
     if (t == "return") {
         Node val = eval_expr(std::any_cast<Node>(node.data["expr"]), env);
-        throw ReturnSignal(std::any_cast<int>(val.data.at("value")));
+        throw ReturnSignal(val);
     }
     if (t == "def") {
         std::string fname = std::any_cast<std::string>(node.data["name"]);
@@ -969,23 +993,27 @@ void exec_stmt(Node& node, Env* env) {
         return;
     }
     if (t == "import") {
-        std::string fileName = this->eval_expr(std::any_cast<Node>(node.data["fileName"]), env);
-        std::unordered_map<std::string, std::string> files = std::any_cast<auto>(env.get("__importables__"));
+        Node fileNameNode = eval_expr(std::any_cast<Node>(node.data["fileName"]), env);
+        if (fileNameNode.type != "string") {
+            throw std::runtime_error("file name for import has to be a string!");
+        }
+        std::string fileName = std::any_cast<std::string>(fileNameNode.data.at("value"));
+        std::unordered_map<std::string, std::string> files = std::any_cast<std::unordered_map<std::string, std::string>>(env->get("__importables__"));
         if (files.count(fileName) < 0) {
             throw std::runtime_error("Module '" + fileName + "' does not exist in current env");
         }
-        Env runEnv run(files[fileName], basicEnv(files))
-        Node lib = std::any_cast<Node>(runEnv.get("module"))
-        size_t pos = s.rfind('.');  // find last '.'
+        Env runEnv = run(files[fileName], basicEnv(files));
+        Node lib = std::any_cast<Node>(runEnv.get("module"));
+        size_t pos = fileName.rfind('.');  // find last '.'
         std::string lastPart;
 
         if (pos != std::string::npos) {
-            lastPart = s.substr(pos + 1);  // get substring after last '.'
+            lastPart = fileName.substr(pos + 1);  // get substring after last '.'
         } else {
-            lastPart = s;  // no '.' found, take whole string
+            lastPart = fileName;  // no '.' found, take whole string
         }
         
-        env.set(lastPart, lib);
+        env->set(lastPart, lib);
     }
 
     if (t == "block") {
@@ -1033,6 +1061,8 @@ std::string ROSnode_toS(Node n) {
     throw std::runtime_error("Cant convert ROS node " + n.repr() + " to a formated value string");
 }
 
+static const std::unordered_map<std::string, std::string> ROS = {{"ver", "BETA (ver2.1) c++"}};
+
 
 Node cpp_print(Nodes args, Env* env) {
     for (Node n : args) {
@@ -1044,15 +1074,13 @@ Node cpp_print(Nodes args, Env* env) {
 Env basicEnv(std::unordered_map<std::string, std::string> files) {
     Env env;
 
-    const std::unordered_map<std::string, std::string> ROS = {{"ver", "BETA (ver2.1) c++"}}
-
     Function Print = Function("print", {}, {}, nullptr);
     Print.escapeToCpp = true;
     Print.cppfunc = cpp_print;
 
     env.set("print", Node("function", JsonLike{{"value", Print}}));
     env.set("__importables__", Node("dict", JsonLike{{"items", files}}));
-    env.set("ROS", Node("dict", JsonLike{{"items", ROS}}))
+    env.set("ROS", Node("dict", JsonLike{{"items", ROS}}));
     return env;
 }
 
@@ -1060,34 +1088,192 @@ Env run(std::string code, Env env = basicEnv({})) {
     Tokens tokens = lex(code);
     Parcer p = Parcer(tokens);
     Node ast = p.parse();
-    exec_stmt(ast, env);
-    return Env
+    exec_stmt(ast, &env);
+    return env;
 }
 
+// Helpers
+std::unordered_map<std::string, std::string> readModule(const std::string& path_str) {
+    std::unordered_map<std::string, std::string> files_dict;
+    filesys::path path(path_str);
 
-int main() {
+    if (!filesys::exists(path)) {
+        std::cerr << "Path '" << path_str << "' does not exist!\n";
+        return files_dict;
+    }
+
+    try {
+        for (auto& entry : filesys::recursive_directory_iterator(path)) {
+            if (filesys::is_regular_file(entry.path())) {
+                const std::string fname = entry.path().filename().string();
+                try {
+                    std::ifstream f(entry.path(), std::ios::in | std::ios::binary);
+                    if (!f.is_open()) {
+                        files_dict[fname] = "[Error reading file: cannot open]";
+                        continue;
+                    }
+
+                    std::stringstream ss;
+                    ss << f.rdbuf();
+                    files_dict[fname] = ss.str();
+                }
+                catch (const std::exception& e) {
+                    files_dict[fname] = std::string("[Error reading file: ") + e.what() + "]";
+                }
+            }
+        }
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Error walking directory '" << path_str << "': " << e.what() << "\n";
+    }
+
+    return files_dict;
+}
+
+std::string trim(const std::string& s) {
+    size_t start = s.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos) return "";
+    size_t end = s.find_last_not_of(" \t\r\n");
+    return s.substr(start, end - start + 1);
+}
+
+bool starts_with(const std::string& s, const std::string& prefix) {
+    return s.size() >= prefix.size() && s.substr(0, prefix.size()) == prefix;
+}
+
+std::string join_lines(const Strings& lines) {
+    std::string out;
+    for (const auto& l : lines) {
+        out += l + "\n";
+    }
+    return out;
+}
+
+int main(int argc, char* argv[]) {
     init();
-    std::string code = R"(
-def fib(n)
-    a = 0
-    b = 1
-    for (_ = 0; _ != n; _ = _ + 1)
-        c = a + b
-        a = b
-        b = c
-        print(b)
-    end
-end
+    const bool debug = false;
+    const std::string arg_error_str = 
+        "Error no start up mode specified! \n"
+        "Usage[0]: ros repl \n"
+        "Usage[1]: ros run <path> \n"
+        "Usage[2]: ros run <path> --libs <path to folder or file>\n";
 
-fib(100)
+    if ((argc < 2 || argc > 5) and not debug) {
+        std::cout << arg_error_str;
+        return 0;
+    }
 
-end)";
+    if ((argc >= 2 && std::string(argv[1]) == "run") and not debug) {
+        if (argc != 3 && !(argc == 5 && std::string(argv[3]) == "--libs")) {
+            std::cout << arg_error_str;
+            return 0;
+        }
 
-    auto start = std::chrono::high_resolution_clock::now();
-    run(code);
-    auto end = std::chrono::high_resolution_clock::now();
+        filesys::path Path = argv[2];
+        if (!filesys::exists(Path)) {
+            std::cout << "File or Folder '" + std::string(argv[2]) + "' does not exist!\n";
+            return 0;
+        }
 
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+        if (filesys::is_regular_file(Path)) {
+            std::string contents = read(Path);
+            if (argc == 5) {
+                Env env = basicEnv(readModule(argv[4]));
+                run(contents, &env);
+            } else {
+                run(contents);
+            }
+        } else {
+            std::cout << "Path given is a Folder not File\n";
+            return 0;
+        }
+    } 
+    else if ((argc >= 2 && std::string(argv[1]) == "repl") or debug) {
+        std::cout << "ROS(Ruby On Spaces) ver:" << ROS.at("ver") << "\n";
+        std::cout << "Type 'run' to execute block \n'clear' to clear block \n'save <path>' to save block into a file \n"
+                     "'load <path>' to load a file \n'last' to load the last ran block into the current block \n"
+                     "'cls' to clear the terminal \n'exit' to exit\n";
 
-    std::cout << "Time taken: " << duration.count() << std::endl;
+        int lineNo = 1;
+        Strings toExec;
+        Strings lastRan;
+        const int maxDigits = 4;
+
+        while (true) {
+            try {
+                std::string line;
+                std::cout << "[" << std::setw(maxDigits) << std::setfill('0') << lineNo << "]> ";
+                std::getline(std::cin, line);
+
+                std::string striped = trim(line); 
+
+                if (starts_with(striped, "run")) {
+                    std::string arg1 = trim(striped.substr(3));
+                    std::string code = join_lines(toExec);
+
+                    if (arg1 == "time") {
+                        auto start = std::chrono::high_resolution_clock::now();
+                        run(code);
+                        auto end = std::chrono::high_resolution_clock::now();
+                        std::cout << "---\nTime taken: " 
+                                  << std::chrono::duration<double>(end - start).count() 
+                                  << " sec\n";
+                    } else {
+                        run(code);
+                    }
+
+                    lastRan = toExec;
+                    toExec.clear();
+                    lineNo = 1;
+                    continue;
+                }
+                else if (starts_with(striped, "exit")) {
+                    break;
+                }
+                else if (starts_with(striped, "cls")) {
+                    system("cls");
+                }
+                else if (starts_with(striped, "clear")) {
+                    toExec.clear();
+                    lineNo = 1;
+                    continue;
+                }
+                else if (starts_with(striped, "save")) {
+                    std::ofstream f(line.substr(5));
+                    for (auto &l : toExec) f << l << "\n";
+                    toExec.clear();
+                    lineNo = 1;
+                    std::cout << "---\n";
+                    continue;
+                }
+                else if (starts_with(striped, "load")) {
+                    std::ifstream f(striped.substr(5));
+                    toExec.clear();
+                    std::string l;
+                    while (std::getline(f, l)) toExec.push_back(l);
+                    lineNo = toExec.size() + 1;
+                    for (int i = 0; i < toExec.size(); ++i)
+                        std::cout << "[" << std::setw(maxDigits) << std::setfill('0') << (i+1) << "]> " << toExec[i] << "\n";
+                    continue;
+                }
+                else if (starts_with(striped, "last")) {
+                    toExec = lastRan;
+                    for (int i = 0; i < lastRan.size(); ++i)
+                        std::cout << "[" << std::setw(maxDigits) << std::setfill('0') << (i+1) << "]> " << lastRan[i] << "\n";
+                    lineNo = toExec.size() + 1;
+                    continue;
+                }
+                else {
+                    toExec.push_back(line);
+                }
+
+                lineNo++;
+
+            } catch (const std::exception &e) {
+                std::cout << "Error: " << e.what() << "\n";
+                toExec.clear();
+                lineNo = 1;
+            }
+        }
+    }
 }
