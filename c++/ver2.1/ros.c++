@@ -11,10 +11,11 @@
 #include <optional>
 #include <unordered_map>
 #include <any>
-#include <variant>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <thread>
+#include <cmath>
 
 namespace filesys = std::filesystem;
 std::string read(filesys::path path) {
@@ -1071,6 +1072,30 @@ Node cpp_print(Nodes args, Env* env) {
     return PREBUILTS.at(("null"));
 }
 
+Node cpp_wait(Nodes args, Env* env) {
+    if (args.size() != 1) {
+        throw std::runtime_error("Built-in wait requires exacly 1 arg");
+        return PREBUILTS.at(("null"));
+    } if (not (args[0].type == "number" or args[0].type == "bool")) {
+        throw std::runtime_error("Built-in wait arg[0] should be type number or bool not: " + args[0].type);
+        return PREBUILTS.at(("null"));
+    }
+    float time;
+    if (args[0].data.at("value").type() == typeid(int)) {
+        time = std::any_cast<int>(args[0].data.at("value"));
+    } else if (args[0].data.at("value").type() == typeid(float)) {
+        time = std::any_cast<float>(args[0].data.at("value"));
+    }
+    else {
+        time = (int)(std::any_cast<bool>(args[0].data.at("value")));
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds((int)(time)));
+
+    return PREBUILTS.at(("null"));
+}
+
+
 Env basicEnv(std::unordered_map<std::string, std::string> files) {
     Env env;
 
@@ -1078,7 +1103,12 @@ Env basicEnv(std::unordered_map<std::string, std::string> files) {
     Print.escapeToCpp = true;
     Print.cppfunc = cpp_print;
 
+    Function Wait = Function("wait", {}, {}, nullptr);
+    Wait.escapeToCpp = true;
+    Wait.cppfunc = cpp_wait;
+
     env.set("print", Node("function", JsonLike{{"value", Print}}));
+    env.set("wait", Node("function", JsonLike{{"value", Wait}}));
     env.set("__importables__", Node("dict", JsonLike{{"items", files}}));
     env.set("ROS", Node("dict", JsonLike{{"items", ROS}}));
     return env;
