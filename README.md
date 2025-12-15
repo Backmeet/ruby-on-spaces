@@ -3,17 +3,14 @@
 **Ruby on Spaces** is a small experimental programming language built entirely in Python (with a luau port for ver 2.1).  
 It’s designed as a learning project in **language design, parsing, and interpreter building**, while still being usable for toy projects, scripting, or experimentation.
 
-This language is **minimal, hackable, and deliberately verbose**.  
-It’s not about performance — it’s about showing how a working interpreter can be constructed, extended, and modified.
+This language is **minimal and hackable**.  
 
 ---
 
 ## Overview
 
-- **Implemented in**: Pure Python (and the luau port).  
-- **Execution model**: Lex → Parse (Pratt parser) → AST → Tree-walking interpreter.  
-- **Syntax style**: Ruby-like with `def`, `end`, `while`, `if`, but Python-like in strictness.  
-- **Core philosophy**: Easy to extend — you can add new syntax, keywords, or built-ins by editing one file.
+**It is implemented in** Pure Python, luau, lua, c++. **Its Execution model** is Lex → Parse (Pratt parser) → AST → Tree-walking interpreter. 
+**Its Syntax** is Python like while reading but looks like lua. **The Core philosophy** Easy to extend — you can add new syntax, keywords, or built-ins by editing one file.
 
 ---
 
@@ -28,7 +25,7 @@ It’s not about performance — it’s about showing how a working interpreter 
   - `dict` → `{ key: value, "literal": 123 }`  
 
 - **Variables**  
-  - Dynamic, mutable, global by default  
+  - Dynamic, mutable, local by default  
   - Assigned with `=`  
 
 - **Operators**  
@@ -36,7 +33,7 @@ It’s not about performance — it’s about showing how a working interpreter 
   - Comparisons: `<`, `>`, `<=`, `>=`, `==`, `!=`  
   - Unary: `+x`, `-x`  
   - Indexing: `list[0]`, `dict["key"]`  
-  - Property access sugar: `obj.key`  
+  - Property access `obj.key`  
 
 - **Control flow**  
   - `if` … `end`  
@@ -54,9 +51,10 @@ It’s not about performance — it’s about showing how a working interpreter 
   - `print(x, y, ...)`  
   - `len(x)`  
   - `range(n)` / `range(start, end)` / `range(start, end, step)`  
+  ... and many many more
 
 - **Interop with Python**  
-  - You can register any Python function directly as a builtin via `register_pyfunc(env, "name", func)`.
+  - You can register any Python function directly as a builtin via the `Env` class or editing the `make_global_env`/`basicEnv` functions.
 
 ---
 
@@ -100,12 +98,14 @@ greet("World")
 person = {}
 def person.new(self, name)
     self.name = name
+    return self
 end
+
 def person.greet(self)
     print("Hi, I'm", self.name)
 end
-allen = person
-allen.new("allen")
+
+allen = person.new("allen")
 allen.greet()
 ```
 ## Syntax Reference
@@ -132,18 +132,17 @@ allen.greet()
 
 - **Environments (scopes)**:  
   - Each function call creates a new `Env` (lexical scope).  
-  - Variables are mutable; assignments update the nearest enclosing scope.  
+  - Variables are mutable; assignments update the nearest enclosing scope; varibles will only last for one more nested scope.
 
 - **Functions**:  
   - Represented by the `Function` class.  
   - Normal functions: run AST in a new local environment.  
   - Escape functions: wrap a Python function for builtin interop.  
 
-- **Return**: implemented using exceptions (`ReturnSignal`).  
+- **Return**: implemented using exceptions/interrupts (`ReturnSignal`).  
 
 - **Truthiness**:  
-  - `false` and `null` are falsy  
-  - everything else is truthy  
+  - Python like  
 
 ---
 
@@ -159,14 +158,14 @@ allen.greet()
       return wrap_for_py(s.upper())
 
   env = make_global_env()  # base env with builtins
-  register_pyfunc(env, "upper", py_upper)
+  register_pyfunc(env, "upper", py_upper) # now edit make_gloabal_env direcly, this function is not supported or will be kept working
   run('''
   print(upper("hello, world"))
   end
-  ''')
+  ''', env)
   ```
 
-  b. Luau (Roblox) interop
+  b. Luau(Roblox)/Lua interop
   Example:
   ```lua
   local ROSL = require(...)
@@ -200,12 +199,13 @@ allen.greet()
 
 ---
 
-## Running
+## Running (May vary with host language)
 
 - **As a file**:  
   ```bash
-  python ruby.py program.rbs
+  python ruby.py program.rbs [--libs path_to_modules]
   ```
+  
 - **Via the REPL**
   ```bash
   python ruby.pu
