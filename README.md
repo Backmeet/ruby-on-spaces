@@ -1,9 +1,7 @@
 # Ruby on Spaces
 
 **Ruby on Spaces** is a small experimental programming language built entirely in Python (with a luau port for ver 2.1).  
-It’s designed as a learning project in **language design, parsing, and interpreter building**, while still being usable for toy projects, scripting, or experimentation.
-
-This language is **minimal and hackable**.  
+It’s designed as a learning project in **language design, parsing, and interpreter building**, while still being usable for toy projects, scripting, or experimentation. 
 
 ---
 
